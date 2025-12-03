@@ -121,17 +121,53 @@ export default function useMessageActions(props: TMessageActions) {
 
   const copyToClipboard = useCopyToClipboard({ text, content, searchResults });
 
+  // const messageLabel = useMemo(() => {
+  //   if (message?.isCreatedByUser === true) {
+  //     return UsernameDisplay ? (user?.name ?? '') || user?.username : localize('com_user_message');
+  //   } else if (agent) {
+  //     return agent.name ?? 'Assistant';
+  //   } else if (assistant) {
+  //     return assistant.name ?? 'Assistant';
+  //   } else {
+  //     return message?.sender;
+  //   }
+  // }, [message, agent, assistant, UsernameDisplay, user, localize]);
+
+  /**
+   * 消息标签显示逻辑：
+   * 1. 如果消息是用户创建的，显示用户名或“用户消息”。
+   * 2. 否则，优先根据 endpoint 显示 AI 厂商名称（如 OpenAI、Google 等）。
+   * 3. 如果 endpoint 未识别，则 fallback 到 assistant.name 或 agent.name。
+   * 4. 如果有模型名称，则显示为“AI名称（模型名称）”格式。
+   * 这样可以更清晰地标识消息来源和使用的模型。
+   * by ruanyao 2025-11-26
+   */
   const messageLabel = useMemo(() => {
     if (message?.isCreatedByUser === true) {
       return UsernameDisplay ? (user?.name ?? '') || user?.username : localize('com_user_message');
-    } else if (agent) {
-      return agent.name ?? 'Assistant';
-    } else if (assistant) {
-      return assistant.name ?? 'Assistant';
-    } else {
-      return message?.sender;
     }
-  }, [message, agent, assistant, UsernameDisplay, user, localize]);
+    // 获取 endpoint
+    const endpoint = (message?.endpoint ?? conversation?.endpoint ?? '').toLowerCase();
+    // AI 厂商名映射（你可以增删）
+    const endpointMap: Record<string, string> = {
+      openai: 'OpenAI',
+      google: 'Google',
+      anthropic: 'Anthropic', // ← Claude 显示为 Anthropic
+      groq: 'Groq',
+      deepseek: 'DeepSeek',
+    };
+    // 优先根据 endpoint 显示品牌名称
+    let aiName = endpointMap[endpoint];
+    // 如果 endpoint 未识别，则 fallback 到 assistant.name 或 agent.name
+    if (!aiName) {
+
+      aiName = agent?.name ?? assistant?.name ?? 'Assistant';
+    }
+    // 模型名称
+    const modelName = message?.model ?? conversation?.model ?? '';
+    // 显示格式： AI名称（模型名称）
+    return modelName ? `${aiName}（${modelName}）` : aiName;
+  }, [message, agent, assistant, UsernameDisplay, user, localize, conversation]);
 
   const feedbackMutation = useUpdateFeedbackMutation(
     conversation?.conversationId || '',
