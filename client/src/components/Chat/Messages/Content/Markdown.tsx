@@ -22,6 +22,38 @@ type TContentProps = {
   isLatestMessage: boolean;
 };
 
+// --- 新增代码开始 ---
+// 用于递归处理节点，将文本中的 <br> 标签替换为实际的换行组件
+const processTableContent = (content: React.ReactNode): React.ReactNode => {
+  if (typeof content === 'string') {
+    const parts = content.split(/<br\s*\/?>/gi); // 匹配 <br>, <br/>, <br />
+    if (parts.length === 1) return content;
+
+    return parts.map((part, i) => (
+      <React.Fragment key={i}>
+        {i > 0 && <br />}
+        {part}
+      </React.Fragment>
+    ));
+  }
+
+  if (Array.isArray(content)) {
+    return content.map((child, i) => (
+      <React.Fragment key={i}>{processTableContent(child)}</React.Fragment>
+    ));
+  }
+
+  if (React.isValidElement(content) && content.props.children) {
+    return React.cloneElement(content as React.ReactElement, {
+      ...content.props,
+      children: processTableContent(content.props.children),
+    });
+  }
+
+  return content;
+};
+// --- 新增代码结束 ---
+
 const Markdown = memo(({ content = '', isLatestMessage }: TContentProps) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isInitializing = content === '';
@@ -85,6 +117,16 @@ const Markdown = memo(({ content = '', isLatestMessage }: TContentProps) => {
                 citation: Citation,
                 'highlighted-text': HighlightedText,
                 'composite-citation': CompositeCitation,
+                // --- 新增 td 组件映射 ---
+                td: ({ children, ...props }: any) => (
+                  <td
+                    {...props}
+                    className="break-words border border-black/10 p-2 text-left align-top dark:border-white/10"
+                  >
+                    {processTableContent(children)}
+                  </td>
+                ),
+                // -----------------------
               } as {
                 [nodeType: string]: React.ElementType;
               }

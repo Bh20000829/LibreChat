@@ -1,6 +1,6 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import copy from 'copy-to-clipboard';
-import { InfoIcon } from 'lucide-react';
+import { InfoIcon, Download } from 'lucide-react';
 import { Tools } from 'librechat-data-provider';
 import { Clipboard, CheckMark } from '@librechat/client';
 import type { CodeBarProps } from '~/common';
@@ -23,6 +23,34 @@ const CodeBar: React.FC<CodeBarProps> = React.memo(
   ({ lang, error, codeRef, blockIndex, plugin = null, allowExecution = true }) => {
     const localize = useLocalize();
     const [isCopied, setIsCopied] = useState(false);
+
+    // 2. 新增：处理下载 JSON 的函数
+    const handleDownload = () => {
+      const codeString = codeRef.current?.textContent;
+      if (!codeString) return;
+
+      try {
+        // 创建 Blob 对象
+        const blob = new Blob([codeString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        // 创建临时下载链接
+        const link = document.createElement('a');
+        link.href = url;
+        // 生成文件名，例如 download-1715000000.json
+        link.download = `output-${Date.now()}.json`;
+        document.body.appendChild(link);
+        link.click();
+
+        // 清理
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error('Download failed', e);
+      }
+    };
+
+
     return (
       <div className="relative flex items-center justify-between rounded-tl-md rounded-tr-md bg-gray-700 px-4 py-2 font-sans text-xs text-gray-200 dark:bg-gray-700">
         <span className="">{lang}</span>
@@ -30,9 +58,23 @@ const CodeBar: React.FC<CodeBarProps> = React.memo(
           <InfoIcon className="ml-auto flex h-4 w-4 gap-2 text-white/50" />
         ) : (
           <div className="flex items-center justify-center gap-4">
-            {allowExecution === true && (
+            {allowExecution && (
               <RunCode lang={lang} codeRef={codeRef} blockIndex={blockIndex} />
             )}
+
+            {/* 3. 新增：下载按钮，仅在 lang 为 json 时显示 */}
+            {lang === 'json' && (
+              <button
+                type="button"
+                className="flex gap-2 hover:text-white" // 保持与复制按钮样式一致的交互感
+                onClick={handleDownload}
+                title="Download JSON"
+              >
+                <Download className="h-4 w-4" />
+                下载文件
+              </button>
+            )}
+
             <button
               type="button"
               className={cn(

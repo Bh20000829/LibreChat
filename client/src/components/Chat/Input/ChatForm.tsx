@@ -123,13 +123,26 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
     }
   }, [isCollapsed]);
 
-  useAutoSave({
-    files,
-    setFiles,
-    textAreaRef,
-    conversationId,
-    isSubmitting: isSubmitting || isSubmittingAdded,
-  });
+  // useAutoSave({
+  //   files,
+  //   setFiles,
+  //   textAreaRef,
+  //   conversationId,
+  //   isSubmitting: isSubmitting || isSubmittingAdded,
+  // });
+
+  useEffect(() => {
+    // 清空文字输入框
+    methods.setValue('text', '');
+    // 清空已上传的文件（如果有 setFiles 方法）
+    if (setFiles) {
+      setFiles(new Map());
+    }
+    // (可选) 切换后自动聚焦输入框
+    if (textAreaRef.current) {
+      textAreaRef.current.focus();
+    }
+  }, [conversationId, methods, setFiles]);
 
   const { submitMessage, submitPrompt } = useSubmitMessage();
 
