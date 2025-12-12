@@ -3,6 +3,11 @@ const { encrypt, decrypt } = require('@librechat/api');
 const { ErrorTypes } = require('librechat-data-provider');
 const { updateUser } = require('~/models');
 const { Key } = require('~/db/models');
+const mongoose = require('mongoose');
+
+// 简单缓存
+const groupTypeCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 分钟
 
 /**
  * Updates the plugins for a user based on the action specified (install/uninstall).
@@ -172,6 +177,90 @@ const checkUserKeyExpiry = (expiresAt, endpoint) => {
   }
 };
 
+/**
+ * 根据 userId（_id）从缓存/数据库获取 groupType
+ */
+const getGroupTypeWithCache = async (userId) => {
+  const now = Date.now();
+
+  if (!userId) return null;
+
+  // 1. 先查缓存
+  if (groupTypeCache.has(userId.toString())) {
+    const cached = groupTypeCache.get(userId.toString());
+    if (now < cached.expiry) {
+      return cached.groupType;
+    }
+  }
+
+  // 2. 查数据库
+  try {
+    const User = mongoose.model('User');
+    const user = await User.findById(userId).select('groupType').lean();
+    const type = user ? user.groupType : null;
+
+    // 3. 写入缓存
+    groupTypeCache.set(userId.toString(), {
+      groupType: type,
+      expiry: now + CACHE_TTL,
+    });
+
+    return type;
+  } catch (err) {
+    console.error('[GroupTypeCache] Error:', err);
+    return null;
+  }
+};
+
+/**
+ * 通用函数：根据 Provider 前缀 + groupType，拼出对应的环境变量并返回 Key
+ * e.g.
+ *   providerEnvPrefix: 'OPENAI_API_KEY'
+ *   groupType: 'VIP'
+ *   => 读取 process.env.OPENAI_API_KEY_VIP
+ */
+const getKeyByGroupTypeAndPrefix = (groupType, providerEnvPrefix)  => {
+  if (!groupType || !providerEnvPrefix) return null;
+
+  const envKey = `${providerEnvPrefix}_${groupType}`;
+  const apiKey = process.env[envKey];
+
+  if (!apiKey) {
+    // 这里按需决定要不要打日志
+    console.warn(`[GroupTypeKey] No key found for env: ${envKey}`);
+    return null;
+  }
+
+  return { apiKey, envKey };
+};
+
+/**
+ * 高阶封装：给任意 Provider 使用
+ * @param {Object} options
+ * @param {Object} options.user - req.user 对象
+ * @param {string} options.providerEnvPrefix - Provider 的环境变量前缀，如 'OPENAI_API_KEY'、'GOOGLE_KEY'
+ * @returns {Promise<{ apiKey: string, groupType: string, envKey: string } | null>}
+ */
+const getProviderKeyForUserGroup = async ({ user, providerEnvPrefix }) => {
+  if (!user) return null;
+
+  // 如果你想支持“直接用 req.user.groupType，不再查库”，可以在这里做分支
+  const userId = user._id || user.id;
+  if (!userId) return null;
+
+  const groupType = await getGroupTypeWithCache(userId);
+  if (!groupType) return null;
+
+  const result = getKeyByGroupTypeAndPrefix(groupType, providerEnvPrefix);
+  if (!result) return null;
+
+  return {
+    apiKey: result.apiKey,
+    groupType,
+    envKey: result.envKey,
+  };
+};
+
 module.exports = {
   getUserKey,
   updateUserKey,
@@ -180,4 +269,7 @@ module.exports = {
   getUserKeyExpiry,
   checkUserKeyExpiry,
   updateUserPluginsService,
+  getGroupTypeWithCache,
+  getKeyByGroupTypeAndPrefix,
+  getProviderKeyForUserGroup,
 };

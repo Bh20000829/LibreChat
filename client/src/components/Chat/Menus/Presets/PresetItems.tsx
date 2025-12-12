@@ -1,3 +1,5 @@
+// 1. 引入图标
+import { Download, FileDown } from 'lucide-react';
 import { useRecoilValue } from 'recoil';
 import { Close } from '@radix-ui/react-popover';
 import { Flipper, Flipped } from 'react-flip-toolkit';
@@ -42,6 +44,66 @@ const PresetItems: FC<{
   const { data: endpointsConfig } = useGetEndpointsQuery();
   const defaultPreset = useRecoilValue(store.defaultPreset);
   const localize = useLocalize();
+
+  // 2. 导出函数 (放在组件内部)
+  const exportPreset = (e: React.MouseEvent, preset: TPreset) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const jsonString = JSON.stringify(preset, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      // 安全的文件名处理
+      const safeTitle = (preset.title || 'preset').replace(/[^a-z0-9\u4e00-\u9fa5_.-]/gi, '_');
+      link.download = `${safeTitle}.json`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
+  };
+
+  // --- 新增：下载模版逻辑 ---
+  const handleDownloadTemplate = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // 这里定义你想要的“标准模版”内容
+    const templateData = {
+      title: '新的角色预设 (预设列表显示的名称)',
+      chatGptLabel: 'AI 的显示昵称 (聊天显示的昵称)',
+      endpoint:
+        '指定使用哪一个服务商的接口（只能选择以下内容：openAI、google、anthropic、deepseek），区分大小写',
+      endpointType:
+        '跟上面的 endpoint 值一一对应，openAI->openAI，google->google、anthropic->anthropic、deepseek->custom',
+      model: '上面 endpoint 指定的服务商对应的模型',
+      promptPrefix: '核心角色设定，系统提示词',
+      // 高级参数 (可选)
+      modelConfig: {
+        temperature: 0.7, // 范围：0.0 ~ 2.0，控制回答的随机性和创造力
+        top_p: 1, // 另一种控制随机性的方法。通常建议和 temperature 只调其中一个，另一个保持默认。
+        presence_penalty: 0, // 范围：-2.0 ~ 2.0，作用：数值越高，AI 越倾向于谈论新话题。
+        frequency_penalty: 0, // 范围：-2.0 ~ 2.0，数值越高，AI 越会避免使用已经出现过的词。如果你觉得 AI 像复读机，调高它。
+      },
+    };
+
+    const jsonString = JSON.stringify(templateData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'preset_template.json'; // 下载的文件名
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+  // --- 新增结束 ---
+
   return (
     <>
       <div
@@ -103,6 +165,17 @@ const PresetItems: FC<{
                 selectText: localize('com_ui_clear'),
               }}
             />
+
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              className="mr-1 flex h-[32px] cursor-pointer items-center rounded bg-transparent px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-blue-700 focus:ring-ring dark:bg-transparent dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-blue-500"
+              title="下载预设模版"
+            >
+              <FileDown className="mr-1 h-4 w-4" />
+              模版
+            </button>
+
             <FileUpload onFileSelected={onFileSelected} />
           </Dialog>
         </div>
@@ -183,6 +256,13 @@ const PresetItems: FC<{
                           }}
                         >
                           <EditIcon />
+                        </button>
+                        <button
+                          className="m-0 h-full rounded-md p-2 text-gray-400 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 sm:invisible sm:group-hover:visible"
+                          onClick={(e) => exportPreset(e, preset)}
+                          title="Export JSON"
+                        >
+                          <Download className="h-4 w-4" />
                         </button>
                         <button
                           className="m-0 h-full rounded-md p-2 text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 sm:invisible sm:group-hover:visible"

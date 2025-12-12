@@ -15,6 +15,10 @@ const { getUserKeyValues, checkUserKeyExpiry } = require('~/server/services/User
 const { fetchModels } = require('~/server/services/ModelService');
 const OpenAIClient = require('~/app/clients/OpenAIClient');
 const getLogStores = require('~/cache/getLogStores');
+const {
+  getGroupTypeWithCache,
+  getKeyByGroupTypeAndPrefix,
+} = require('~/server/services/UserService');
 
 const { PROXY } = process.env;
 
@@ -59,7 +63,40 @@ const initializeClient = async ({ req, res, endpointOption, optionsOnly, overrid
     userValues = await getUserKeyValues({ userId: req.user.id, name: endpoint });
   }
 
-  let apiKey = userProvidesKey ? userValues?.apiKey : CUSTOM_API_KEY;
+  // ==== ★★ 这里加入 groupType 动态 key 逻辑（仅在不是 user_provided 时）★★ ====
+  let effectiveApiKey = CUSTOM_API_KEY;
+
+  if (!userProvidesKey && req.user) {
+    // 从用户表或缓存中获取 groupType
+    const groupType = await getGroupTypeWithCache(req.user._id || req.user.id);
+    if (groupType) {
+      /**
+       * 约定使用法：
+       *   - endpointConfig.apiKey 在配置里写的是一个 env 变量名，比如 'MYAPI_KEY'
+       *   - extractEnvVariable(endpointConfig.apiKey) 读取的是 process.env.MYAPI_KEY 的值
+       *   - 我们这里希望基于 'MYAPI_KEY' 这个前缀，去查 'MYAPI_KEY_${groupType}'
+       *
+       * 因此要从 endpointConfig.apiKey 里取得前缀名：
+       */
+      const apiKeyEnvName = endpointConfig.apiKey.replace(/^\${?(.+?)}?$/, '$1'); // 比如 'MYAPI_KEY'
+      const keyInfo = getKeyByGroupTypeAndPrefix(groupType, apiKeyEnvName);
+
+      if (keyInfo && keyInfo.apiKey) {
+        effectiveApiKey = keyInfo.apiKey;
+
+        console.log(
+          `===============[KeySwitch-Custom] Endpoint: ${endpoint}, User: ${
+            req.user.id || req.user._id
+          }, ` +
+            `Type: ${groupType}, Env: ${keyInfo.envKey}, ` +
+            `KeyPrefix: ${keyInfo.apiKey}`,
+        );
+      }
+    }
+  }
+  // =====================================================================
+
+  let apiKey = userProvidesKey ? userValues?.apiKey : effectiveApiKey;
   let baseURL = userProvidesURL ? userValues?.baseURL : CUSTOM_BASE_URL;
 
   if (userProvidesKey & !apiKey) {

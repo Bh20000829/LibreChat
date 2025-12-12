@@ -66,6 +66,9 @@ const userSchema = new Schema<IUser>(
       type: String,
       default: SystemRoles.USER,
     },
+    groupType: {
+      type: Number,
+    },
     googleId: {
       type: String,
       unique: true,

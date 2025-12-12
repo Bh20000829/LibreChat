@@ -3,6 +3,7 @@ const { EModelEndpoint, AuthKeys } = require('librechat-data-provider');
 const { getGoogleConfig, isEnabled, loadServiceKey } = require('@librechat/api');
 const { getUserKey, checkUserKeyExpiry } = require('~/server/services/UserService');
 const { GoogleClient } = require('~/app');
+const { getProviderKeyForUserGroup } = require('~/server/services/UserService');
 
 const initializeClient = async ({ req, res, endpointOption, overrideModel, optionsOnly }) => {
   const { GOOGLE_KEY, GOOGLE_REVERSE_PROXY, GOOGLE_AUTH_HEADER, PROXY } = process.env;
@@ -37,11 +38,32 @@ const initializeClient = async ({ req, res, endpointOption, overrideModel, optio
     }
   }
 
+  // ========== ★★ 新增：按 groupType 动态选择 GOOGLE_KEY_{groupType} ★★ ==========
+  let effectiveGoogleKey = GOOGLE_KEY;
+
+  // 只有在不是用户自带 key、且有 req.user 时才按 groupType 切换
+  if (!isUserProvided && req.user) {
+    const keyInfo = await getProviderKeyForUserGroup({
+      user: req.user,
+      providerEnvPrefix: 'GOOGLE_KEY',
+    });
+
+    if (keyInfo && keyInfo.apiKey) {
+      effectiveGoogleKey = keyInfo.apiKey;
+      console.log(
+        `===============[GOOGLE_KEY] User: ${req.user.id || req.user._id}, ` +
+          `Type: ${keyInfo.groupType}, Env: ${keyInfo.envKey}, ` +
+          `KeyPrefix: ${keyInfo.apiKey}`,
+      );
+    }
+  };
+  // ================================================================
+
   const credentials = isUserProvided
     ? userKey
     : {
         [AuthKeys.GOOGLE_SERVICE_KEY]: serviceKey,
-        [AuthKeys.GOOGLE_API_KEY]: GOOGLE_KEY,
+        [AuthKeys.GOOGLE_API_KEY]: effectiveGoogleKey,
       };
 
   let clientOptions = {};
