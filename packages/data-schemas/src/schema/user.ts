@@ -68,6 +68,12 @@ const userSchema = new Schema<IUser>(
     },
     groupType: {
       type: Number,
+      enum: [1, 2, 3],
+    },
+    providerApiKey: {
+      type: String,
+      trim: true,
+      select: false,
     },
     googleId: {
       type: String,

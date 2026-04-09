@@ -6,7 +6,7 @@ const { Key } = require('~/db/models');
 const mongoose = require('mongoose');
 
 // 简单缓存
-const groupTypeCache = new Map();
+const userKeyRoutingCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 分钟
 
 /**
@@ -178,38 +178,65 @@ const checkUserKeyExpiry = (expiresAt, endpoint) => {
 };
 
 /**
- * 根据 userId（_id）从缓存/数据库获取 groupType
+ * 根据 userId（_id）从缓存/数据库获取 key 路由信息
+ * 包含 providerApiKey 和 groupType
  */
-const getGroupTypeWithCache = async (userId) => {
+const getUserKeyRoutingWithCache = async (userId) => {
   const now = Date.now();
 
-  if (!userId) return null;
+  if (!userId) return { providerApiKey: null, groupType: null };
 
   // 1. 先查缓存
-  if (groupTypeCache.has(userId.toString())) {
-    const cached = groupTypeCache.get(userId.toString());
+  if (userKeyRoutingCache.has(userId.toString())) {
+    const cached = userKeyRoutingCache.get(userId.toString());
     if (now < cached.expiry) {
-      return cached.groupType;
+      return cached.data;
     }
   }
 
   // 2. 查数据库
   try {
     const User = mongoose.model('User');
-    const user = await User.findById(userId).select('groupType').lean();
-    const type = user ? user.groupType : null;
+    const user = await User.findById(userId).select('groupType providerApiKey').lean();
+
+    const groupType = user?.groupType ?? null;
+    const providerApiKey =
+      typeof user?.providerApiKey === 'string' && user.providerApiKey.trim().length > 0
+        ? user.providerApiKey.trim()
+        : null;
+
+    const data = {
+      providerApiKey,
+      groupType,
+    };
 
     // 3. 写入缓存
-    groupTypeCache.set(userId.toString(), {
-      groupType: type,
+    userKeyRoutingCache.set(userId.toString(), {
+      data,
       expiry: now + CACHE_TTL,
     });
 
-    return type;
+    return data;
   } catch (err) {
     console.error('[GroupTypeCache] Error:', err);
-    return null;
+    return { providerApiKey: null, groupType: null };
   }
+};
+
+/**
+ * 根据 userId（_id）从缓存/数据库获取 groupType
+ */
+const getGroupTypeWithCache = async (userId) => {
+  const data = await getUserKeyRoutingWithCache(userId);
+  return data.groupType;
+};
+
+/**
+ * 根据 userId（_id）从缓存/数据库获取 providerApiKey
+ */
+const getProviderApiKeyWithCache = async (userId) => {
+  const data = await getUserKeyRoutingWithCache(userId);
+  return data.providerApiKey;
 };
 
 /**
@@ -248,7 +275,7 @@ const getProviderKeyForUserGroup = async ({ user, providerEnvPrefix }) => {
   const userId = user._id || user.id;
   if (!userId) return null;
 
-  const groupType = await getGroupTypeWithCache(userId);
+  const { groupType } = await getUserKeyRoutingWithCache(userId);
   if (!groupType) return null;
 
   const result = getKeyByGroupTypeAndPrefix(groupType, providerEnvPrefix);
@@ -261,6 +288,63 @@ const getProviderKeyForUserGroup = async ({ user, providerEnvPrefix }) => {
   };
 };
 
+/**
+ * 统一选择 provider key：用户 key > 分组 key > 默认 key
+ * @param {Object} options
+ * @param {Object} options.user - req.user
+ * @param {string} options.providerEnvPrefix - 环境变量前缀，例如 OPENAI_API_KEY
+ * @param {string | undefined | null} options.defaultApiKey - 默认环境变量 key
+ * @returns {Promise<{apiKey: string | undefined | null, source: 'user' | 'group' | 'default', groupType?: number | null, envKey?: string | null}>}
+ */
+const resolveProviderApiKeyForUser = async ({ user, providerEnvPrefix, defaultApiKey }) => {
+  if (!user) {
+    return {
+      apiKey: defaultApiKey,
+      source: 'default',
+      groupType: null,
+      envKey: null,
+    };
+  }
+
+  const userId = user._id || user.id;
+  if (!userId) {
+    return {
+      apiKey: defaultApiKey,
+      source: 'default',
+      groupType: null,
+      envKey: null,
+    };
+  }
+
+  const { providerApiKey, groupType } = await getUserKeyRoutingWithCache(userId);
+
+  if (providerApiKey) {
+    return {
+      apiKey: providerApiKey,
+      source: 'user',
+      groupType,
+      envKey: null,
+    };
+  }
+
+  const groupKey = getKeyByGroupTypeAndPrefix(groupType, providerEnvPrefix);
+  if (groupKey?.apiKey) {
+    return {
+      apiKey: groupKey.apiKey,
+      source: 'group',
+      groupType,
+      envKey: groupKey.envKey,
+    };
+  }
+
+  return {
+    apiKey: defaultApiKey,
+    source: 'default',
+    groupType,
+    envKey: null,
+  };
+};
+
 module.exports = {
   getUserKey,
   updateUserKey,
@@ -269,7 +353,10 @@ module.exports = {
   getUserKeyExpiry,
   checkUserKeyExpiry,
   updateUserPluginsService,
+  getUserKeyRoutingWithCache,
   getGroupTypeWithCache,
+  getProviderApiKeyWithCache,
   getKeyByGroupTypeAndPrefix,
   getProviderKeyForUserGroup,
+  resolveProviderApiKeyForUser,
 };

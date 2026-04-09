@@ -8,7 +8,7 @@ const {
 } = require('@librechat/api');
 const { getUserKeyValues, checkUserKeyExpiry } = require('~/server/services/UserService');
 const OpenAIClient = require('~/app/clients/OpenAIClient');
-const { getProviderKeyForUserGroup } = require('~/server/services/UserService');
+const { resolveProviderApiKeyForUser } = require('~/server/services/UserService');
 
 const initializeClient = async ({
   req,
@@ -65,27 +65,23 @@ const initializeClient = async ({
 
   const isAzureOpenAI = endpoint === EModelEndpoint.azureOpenAI;
 
-  // --- [开始] GroupType 动态 Key 逻辑 (已优化) ---
-  if (!isAzureOpenAI && !userProvidesKey && req.user) {
-    const keyInfo = await getProviderKeyForUserGroup({
+  if (!userProvidesKey && req.user) {
+    const providerEnvPrefix = isAzureOpenAI ? 'AZURE_API_KEY' : 'OPENAI_API_KEY';
+    const routing = await resolveProviderApiKeyForUser({
       user: req.user,
-      providerEnvPrefix: 'OPENAI_API_KEY',
-      skipUserProvidedKey: userProvidesKey,
+      providerEnvPrefix,
+      defaultApiKey: apiKey,
     });
 
-    if (keyInfo && keyInfo.apiKey) {
-      const { apiKey: typeSpecificKey, groupType, envKey } = keyInfo;
+    apiKey = routing.apiKey;
 
+    if (routing.source !== 'default') {
       console.log(
-        `===============[OPENAI_API_KEY] User: ${req.user.id || req.user._id}, ` +
-          `Type: ${groupType}, KeyEnv: ${envKey}, ` +
-          `KeyPrefix: ${typeSpecificKey}`,
+        `===============[${providerEnvPrefix}] User: ${req.user.id || req.user._id}, ` +
+          `Source: ${routing.source}, Type: ${routing.groupType ?? 'N/A'}, Env: ${routing.envKey ?? 'N/A'}`,
       );
-
-      apiKey = typeSpecificKey;
     }
   }
-  // --- [结束] ---
 
   /** @type {false | TAzureConfig} */
   const azureConfig = isAzureOpenAI && appConfig.endpoints?.[EModelEndpoint.azureOpenAI];

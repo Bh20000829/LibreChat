@@ -5,6 +5,7 @@ const {
   getUserKeyValues,
   getUserKeyExpiry,
   checkUserKeyExpiry,
+  resolveProviderApiKeyForUser,
 } = require('~/server/services/UserService');
 const OAIClient = require('~/app/clients/OpenAIClient');
 const { isUserProvided } = require('~/server/utils');
@@ -27,6 +28,22 @@ const initializeClient = async ({ req, res, endpointOption, version, initAppClie
 
   let apiKey = userProvidesKey ? userValues.apiKey : ASSISTANTS_API_KEY;
   let baseURL = userProvidesURL ? userValues.baseURL : ASSISTANTS_BASE_URL;
+
+  if (!userProvidesKey && req.user) {
+    const routing = await resolveProviderApiKeyForUser({
+      user: req.user,
+      providerEnvPrefix: 'ASSISTANTS_API_KEY',
+      defaultApiKey: ASSISTANTS_API_KEY,
+    });
+    apiKey = routing.apiKey;
+
+    if (routing.source !== 'default') {
+      console.log(
+        `===============[ASSISTANTS_API_KEY] User: ${req.user.id || req.user._id}, ` +
+          `Source: ${routing.source}, Type: ${routing.groupType ?? 'N/A'}, Env: ${routing.envKey ?? 'N/A'}`,
+      );
+    }
+  }
 
   const opts = {
     defaultHeaders: {

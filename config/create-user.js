@@ -6,6 +6,19 @@ const { registerUser } = require('~/server/services/AuthService');
 const { askQuestion, silentExit } = require('./helpers');
 const connect = require('./connect');
 
+const normalizeGroupType = (groupTypeInput) => {
+  if (groupTypeInput == null || groupTypeInput === '') {
+    return null;
+  }
+
+  const parsed = Number(groupTypeInput);
+  if (!Number.isInteger(parsed) || ![1, 2, 3].includes(parsed)) {
+    return undefined;
+  }
+
+  return parsed;
+};
+
 (async () => {
   await connect();
 
@@ -14,17 +27,21 @@ const connect = require('./connect');
   console.purple('--------------------------');
 
   if (process.argv.length < 5) {
-    console.orange('Usage: npm run create-user <email> <name> <username> [--email-verified=false]');
+    console.orange(
+      'Usage: npm run create-user <email> <name> <username> [password] [--email-verified=false] [--provider=local] [--provider-api-key=xxx] [--group-type=1|2|3]',
+    );
     console.orange('Note: if you do not pass in the arguments, you will be prompted for them.');
     console.orange(
       'If you really need to pass in the password, you can do so as the 4th argument (not recommended for security).',
     );
     console.orange('Use --email-verified=false to set emailVerified to false. Default is true.');
+    console.orange('Use --provider-api-key=xxx to bind user-specific provider key.');
+    console.orange('Use --group-type=1|2|3 to assign group fallback key bucket.');
     console.purple('--------------------------');
   }
 
   // Parse command line arguments
-  let email, password, name, username, emailVerified, provider;
+  let email, password, name, username, emailVerified, provider, providerApiKey, groupType;
   for (let i = 2; i < process.argv.length; i++) {
     if (process.argv[i].startsWith('--email-verified=')) {
       emailVerified = process.argv[i].split('=')[1].toLowerCase() !== 'false';
@@ -33,6 +50,16 @@ const connect = require('./connect');
 
     if (process.argv[i].startsWith('--provider=')) {
       provider = process.argv[i].split('=')[1];
+      continue;
+    }
+
+    if (process.argv[i].startsWith('--provider-api-key=')) {
+      providerApiKey = process.argv[i].split('=')[1];
+      continue;
+    }
+
+    if (process.argv[i].startsWith('--group-type=')) {
+      groupType = process.argv[i].split('=')[1];
       continue;
     }
 
@@ -93,6 +120,23 @@ or the user will need to attempt logging in to have a verification link sent to 
     }
   }
 
+  if (providerApiKey === undefined) {
+    const keyInput = await askQuestion('Provider API Key: (optional, leave blank to skip)');
+    if (keyInput && keyInput.trim().length > 0) {
+      providerApiKey = keyInput.trim();
+    }
+  }
+
+  if (groupType === undefined) {
+    groupType = await askQuestion('Group Type: (1/2/3, leave blank to skip)');
+  }
+
+  const normalizedGroupType = normalizeGroupType(groupType);
+  if (normalizedGroupType === undefined) {
+    console.red('Error: groupType must be 1, 2, or 3.');
+    silentExit(1);
+  }
+
   const userExists = await User.findOne({ $or: [{ email }, { username }] });
   if (userExists) {
     console.red('Error: A user with that email or username already exists!');
@@ -113,10 +157,29 @@ or the user will need to attempt logging in to have a verification link sent to 
     silentExit(1);
   }
 
-  const userCreated = await User.findOne({ $or: [{ email }, { username }] });
+  let userCreated = await User.findOne({ $or: [{ email }, { username }] }).select('+providerApiKey');
+
+  const userUpdates = {};
+  if (providerApiKey && providerApiKey.trim().length > 0) {
+    userUpdates.providerApiKey = providerApiKey.trim();
+  }
+  if (normalizedGroupType != null) {
+    userUpdates.groupType = normalizedGroupType;
+  }
+
+  if (Object.keys(userUpdates).length > 0) {
+    userCreated = await User.findByIdAndUpdate(
+      userCreated._id,
+      { $set: userUpdates },
+      { new: true },
+    ).select('+providerApiKey');
+  }
+
   if (userCreated) {
     console.green('User created successfully!');
     console.green(`Email verified: ${userCreated.emailVerified}`);
+    console.green(`Group Type: ${userCreated.groupType ?? 'N/A'}`);
+    console.green(`Has Provider API Key: ${Boolean(userCreated.providerApiKey)}`);
     silentExit(0);
   }
 })();

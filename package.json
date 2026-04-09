@@ -29,6 +29,7 @@
     "create-user": "node config/create-user.js",
     "invite-user": "node config/invite-user.js",
     "list-users": "node config/list-users.js",
+    "set-provider-key": "node config/set-provider-key.js",
     "reset-password": "node config/reset-password.js",
     "ban-user": "node config/ban-user.js",
     "delete-user": "node config/delete-user.js",

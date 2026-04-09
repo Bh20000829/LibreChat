@@ -7,7 +7,10 @@ const connect = require('./connect');
 const listUsers = async () => {
   try {
     await connect();
-    const users = await User.find({}, 'email provider avatar username name createdAt');
+    const users = await User.find(
+      {},
+      'email provider avatar username name createdAt groupType providerApiKey',
+    ).select('+providerApiKey');
 
     console.log('\nUser List:');
     console.log('----------------------------------------');
@@ -17,6 +20,8 @@ const listUsers = async () => {
       console.log(`Username: ${user.username || 'N/A'}`);
       console.log(`Name: ${user.name || 'N/A'}`);
       console.log(`Provider: ${user.provider || 'email'}`);
+      console.log(`Group Type: ${user.groupType ?? 'N/A'}`);
+      console.log(`Has Provider API Key: ${Boolean(user.providerApiKey)}`);
       console.log(`Created: ${user.createdAt}`);
       console.log('----------------------------------------');
     });

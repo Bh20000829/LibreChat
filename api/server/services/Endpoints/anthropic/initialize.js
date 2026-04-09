@@ -2,7 +2,7 @@ const { getLLMConfig } = require('@librechat/api');
 const { EModelEndpoint } = require('librechat-data-provider');
 const { getUserKey, checkUserKeyExpiry } = require('~/server/services/UserService');
 const AnthropicClient = require('~/app/clients/AnthropicClient');
-const { getProviderKeyForUserGroup } = require('~/server/services/UserService');
+const { resolveProviderApiKeyForUser } = require('~/server/services/UserService');
 
 const initializeClient = async ({ req, res, endpointOption, overrideModel, optionsOnly }) => {
   const appConfig = req.config;
@@ -23,26 +23,19 @@ const initializeClient = async ({ req, res, endpointOption, overrideModel, optio
     }
     anthropicApiKey = await getUserKey({ userId: req.user.id, name: EModelEndpoint.anthropic });
   } else {
-    // 后端统一 Key 模式，先用默认的环境变量
-    anthropicApiKey = ANTHROPIC_API_KEY;
+    const routing = await resolveProviderApiKeyForUser({
+      user: req.user,
+      providerEnvPrefix: 'ANTHROPIC_API_KEY',
+      defaultApiKey: ANTHROPIC_API_KEY,
+    });
+    anthropicApiKey = routing.apiKey;
 
-    // ★★ 新增：按 groupType 选择 ANTHROPIC_API_KEY_{groupType} ★★
-    if (req.user) {
-      const keyInfo = await getProviderKeyForUserGroup({
-        user: req.user,
-        providerEnvPrefix: 'ANTHROPIC_API_KEY',
-      });
-
-      if (keyInfo && keyInfo.apiKey) {
-        anthropicApiKey = keyInfo.apiKey;
-        console.log(
-          `===============[ANTHROPIC_API_KEY] User: ${req.user.id || req.user._id}, ` +
-            `Type: ${keyInfo.groupType}, Env: ${keyInfo.envKey}, ` +
-            `KeyPrefix: ${keyInfo.apiKey}`,
-        );
-      }
+    if (routing.source !== 'default') {
+      console.log(
+        `===============[ANTHROPIC_API_KEY] User: ${req.user.id || req.user._id}, ` +
+          `Source: ${routing.source}, Type: ${routing.groupType ?? 'N/A'}, Env: ${routing.envKey ?? 'N/A'}`,
+      );
     }
-    // ★★ 新增结束 ★★
   }
 
   if (!anthropicApiKey) {

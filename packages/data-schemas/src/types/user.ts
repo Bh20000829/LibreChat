@@ -5,7 +5,8 @@ export interface IUser extends Document {
   name?: string;
   username?: string;
   email: string;
-  groupType: number;
+  groupType?: number;
+  providerApiKey?: string;
   emailVerified: boolean;
   password?: string;
   avatar?: string;
@@ -58,6 +59,8 @@ export interface UpdateUserRequest {
   name?: string;
   username?: string;
   email?: string;
+  groupType?: number;
+  providerApiKey?: string;
   role?: string;
   emailVerified?: boolean;
   avatar?: string;
