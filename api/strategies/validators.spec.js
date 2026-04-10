@@ -442,7 +442,7 @@ describe('Zod Schemas', () => {
   describe('errorsToString', () => {
     it('should convert errors to string', () => {
       const { error } = registerSchema.safeParse({
-        name: 'Jo',
+        name: 'J',
         username: 'john_doe',
         email: 'john@example.com',
         password: 'password123',
@@ -450,7 +450,7 @@ describe('Zod Schemas', () => {
       });
 
       const result = errorsToString(error.errors);
-      expect(result).toBe('name: String must contain at least 3 character(s)');
+      expect(result).toBe('name: String must contain at least 2 character(s)');
     });
   });
 
