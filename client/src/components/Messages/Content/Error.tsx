@@ -21,6 +21,11 @@ type TTokenBalance = {
   balance: number;
   tokenCost: number;
   promptTokens: number;
+  dailyQuota?: number;
+  usedToday?: number;
+  cycleQuota?: number;
+  usedCycle?: number;
+  nextResetDate?: string;
   prev_count: number;
   violation_count: number;
   date: Date;
@@ -98,12 +103,35 @@ const errorMessages = {
       windowInMinutes > 1 ? `${windowInMinutes} minutes` : 'minute'
     }.`;
   },
-  token_balance: (json: TTokenBalance) => {
-    const { balance, tokenCost, promptTokens, generations } = json;
-    const message = `Insufficient Funds! Balance: ${balance}. Prompt tokens: ${promptTokens}. Cost: ${tokenCost}.`;
+  token_balance: (json: TTokenBalance, localize: LocalizeFunction) => {
+    const {
+      balance,
+      tokenCost,
+      promptTokens,
+      dailyQuota,
+      usedToday,
+      cycleQuota,
+      usedCycle,
+      nextResetDate,
+      generations,
+    } = json;
+    const effectiveQuota = typeof cycleQuota === 'number' ? cycleQuota : dailyQuota;
+    const effectiveUsed = typeof usedCycle === 'number' ? usedCycle : usedToday;
+    const message =
+      typeof effectiveQuota === 'number' && typeof effectiveUsed === 'number'
+        ? localize('com_error_daily_quota_exceeded', {
+            0: effectiveUsed,
+            1: effectiveQuota,
+          })
+        : `Insufficient Funds! Balance: ${balance}. Prompt tokens: ${promptTokens}. Cost: ${tokenCost}.`;
+    const nextResetMessage =
+      typeof nextResetDate === 'string' && nextResetDate.trim().length > 0
+        ? localize('com_error_next_reset_date', { 0: nextResetDate })
+        : null;
     return (
       <>
         {message}
+        {nextResetMessage ? ` ${nextResetMessage}` : null}
         {generations && (
           <>
             <br />

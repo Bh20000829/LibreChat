@@ -23,6 +23,7 @@ const {
 const { registerSchema } = require('~/strategies/validators');
 const { getAppConfig } = require('~/server/services/Config');
 const { sendEmail } = require('~/server/utils');
+const { invalidateUserKeyRoutingCache } = require('~/server/services/UserService');
 
 const domains = {
   client: process.env.DOMAIN_CLIENT,
@@ -258,13 +259,22 @@ const requestPasswordReset = async (req) => {
     error.message = 'Email domain not allowed';
     return error;
   }
-  const user = await findUser({ email }, 'email _id');
+  const user = await findUser({ email }, 'email _id role');
   const emailEnabled = checkEmailConfig();
 
   logger.warn(`[requestPasswordReset] [Password reset request initiated] [Email: ${email}]`);
 
   if (!user) {
     logger.warn(`[requestPasswordReset] [No user found] [Email: ${email}] [IP: ${req.ip}]`);
+    return {
+      message: 'If an account with that email exists, a password reset link has been sent to it.',
+    };
+  }
+
+  if (user.role === SystemRoles.ADMIN) {
+    logger.warn(
+      `[requestPasswordReset] Admin password reset blocked. [Email: ${email}] [ID: ${user._id}] [IP: ${req.ip}]`,
+    );
     return {
       message: 'If an account with that email exists, a password reset link has been sent to it.',
     };
@@ -319,6 +329,16 @@ const requestPasswordReset = async (req) => {
  * @returns
  */
 const resetPassword = async (userId, token, password) => {
+  const targetUser = await getUserById(userId);
+  if (!targetUser) {
+    return new Error('Invalid or expired password reset token');
+  }
+
+  if (targetUser.role === SystemRoles.ADMIN) {
+    logger.warn(`[resetPassword] Admin password reset blocked. [Email: ${targetUser.email}]`);
+    return new Error('Admin password reset is disabled. Please use admin script.');
+  }
+
   let passwordResetToken = await findToken(
     {
       userId,
@@ -366,6 +386,9 @@ const resetPassword = async (userId, token, password) => {
  */
 const setAuthTokens = async (userId, res, _session = null) => {
   try {
+    // Ensure user key routing changes take effect immediately after re-login.
+    invalidateUserKeyRoutingCache(userId);
+
     let session = _session;
     let refreshToken;
     let refreshTokenExpires;
@@ -414,6 +437,9 @@ const setAuthTokens = async (userId, res, _session = null) => {
  */
 const setOpenIDAuthTokens = (tokenset, res, userId) => {
   try {
+    // Ensure user key routing changes take effect immediately after re-login.
+    invalidateUserKeyRoutingCache(userId);
+
     if (!tokenset) {
       logger.error('[setOpenIDAuthTokens] No tokenset found in request');
       return;

@@ -9,6 +9,17 @@ const mongoose = require('mongoose');
 const userKeyRoutingCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 分钟
 
+const invalidateUserKeyRoutingCache = (userId) => {
+  if (!userId) {
+    return;
+  }
+  userKeyRoutingCache.delete(userId.toString());
+};
+
+const clearUserKeyRoutingCache = () => {
+  userKeyRoutingCache.clear();
+};
+
 /**
  * Updates the plugins for a user based on the action specified (install/uninstall).
  * @async
@@ -359,4 +370,6 @@ module.exports = {
   getKeyByGroupTypeAndPrefix,
   getProviderKeyForUserGroup,
   resolveProviderApiKeyForUser,
+  invalidateUserKeyRoutingCache,
+  clearUserKeyRoutingCache,
 };

@@ -2,8 +2,9 @@ const { logger } = require('@librechat/data-schemas');
 const { ViolationTypes } = require('librechat-data-provider');
 const { createAutoRefillTransaction } = require('./Transaction');
 const { logViolation } = require('~/cache');
-const { getMultiplier } = require('./tx');
+const { estimateRequestCostCny } = require('~/models/pricingUtils');
 const { Balance } = require('~/db/models');
+const { ensureQuotaRecord, getNextResetBizDate } = require('~/models/quotaUsage');
 
 function isInvalidDate(date) {
   return isNaN(date);
@@ -22,8 +23,37 @@ const checkBalanceRecord = async function ({
   amount,
   endpointTokenConfig,
 }) {
-  const multiplier = getMultiplier({ valueKey, tokenType, model, endpoint, endpointTokenConfig });
-  const tokenCost = amount * multiplier;
+  const tokenCost = await estimateRequestCostCny({
+    tokenType,
+    amount,
+    model,
+    endpoint,
+    valueKey,
+    endpointTokenConfig,
+  });
+
+  const quotaState = await ensureQuotaRecord(user);
+
+  if (quotaState) {
+    const cycleQuota = Math.max(0, Number(quotaState.cycleQuotaCny ?? quotaState.dailyQuotaCny ?? 0));
+    const usedCycle = Math.max(0, Number(quotaState.usedCycleCny ?? quotaState.usedTodayCny ?? 0));
+    const remaining = Math.max(0, Number(quotaState.remainingBalanceCny ?? 0));
+    const nextResetDate = getNextResetBizDate(quotaState);
+
+    return {
+      canSpend: remaining > 0,
+      balance: remaining,
+      tokenCost,
+      dailyQuota: cycleQuota,
+      usedToday: usedCycle,
+      cycleQuota,
+      usedCycle,
+      nextResetDate,
+      usedInputTokens: Math.max(0, Math.floor(Number(quotaState.usedInputTokens ?? 0))),
+      usedOutputTokens: Math.max(0, Math.floor(Number(quotaState.usedOutputTokens ?? 0))),
+      quotaMode: true,
+    };
+  }
 
   // Retrieve the balance record
   let record = await Balance.findOne({ user }).lean();
@@ -45,7 +75,6 @@ const checkBalanceRecord = async function ({
     tokenType,
     amount,
     balance,
-    multiplier,
     endpointTokenConfig: !!endpointTokenConfig,
   });
 
@@ -130,7 +159,8 @@ const addIntervalToDate = (date, value, unit) => {
  * @throws {Error} Throws an error if there's an issue with the balance check.
  */
 const checkBalance = async ({ req, res, txData }) => {
-  const { canSpend, balance, tokenCost } = await checkBalanceRecord(txData);
+  const { canSpend, balance, tokenCost, dailyQuota, usedToday, cycleQuota, usedCycle, nextResetDate } =
+    await checkBalanceRecord(txData);
   if (canSpend) {
     return true;
   }
@@ -141,6 +171,11 @@ const checkBalance = async ({ req, res, txData }) => {
     balance,
     tokenCost,
     promptTokens: txData.amount,
+    dailyQuota,
+    usedToday,
+    cycleQuota,
+    usedCycle,
+    nextResetDate,
   };
 
   if (txData.generations && txData.generations.length > 0) {

@@ -1,5 +1,7 @@
 const { logger } = require('@librechat/data-schemas');
 const { createTransaction, createStructuredTransaction } = require('./Transaction');
+const { incrementQuotaUsage } = require('./quotaUsage');
+const { calculateUsageCostCny } = require('./pricingUtils');
 /**
  * Creates up to two transactions to record the spending of tokens.
  *
@@ -24,6 +26,8 @@ const spendTokens = async (txData, tokenUsage) => {
     },
   );
   let prompt, completion;
+  const inputUsedTokens = Math.max(0, promptTokens ?? 0);
+  const outputUsedTokens = Math.max(0, completionTokens ?? 0);
   try {
     if (promptTokens !== undefined) {
       prompt = await createTransaction({
@@ -55,6 +59,24 @@ const spendTokens = async (txData, tokenUsage) => {
     }
   } catch (err) {
     logger.error('[spendTokens]', err);
+  } finally {
+    try {
+      const costCny = await calculateUsageCostCny({
+        inputTokens: inputUsedTokens,
+        outputTokens: outputUsedTokens,
+        model: txData.model,
+        endpoint: txData.endpoint,
+        valueKey: txData.valueKey,
+        endpointTokenConfig: txData.endpointTokenConfig,
+      });
+      await incrementQuotaUsage(txData.user, {
+        inputTokens: inputUsedTokens,
+        outputTokens: outputUsedTokens,
+        costCny,
+      });
+    } catch (quotaErr) {
+      logger.error('[spendTokens.quotaUsage]', quotaErr);
+    }
   }
 };
 
@@ -85,6 +107,11 @@ const spendStructuredTokens = async (txData, tokenUsage) => {
     },
   );
   let prompt, completion;
+  const inputUsedTokens =
+    Math.max(0, promptTokens?.input ?? 0) +
+    Math.max(0, promptTokens?.write ?? 0) +
+    Math.max(0, promptTokens?.read ?? 0);
+  const outputUsedTokens = Math.max(0, completionTokens ?? 0);
   try {
     if (promptTokens) {
       const { input = 0, write = 0, read = 0 } = promptTokens;
@@ -119,6 +146,24 @@ const spendStructuredTokens = async (txData, tokenUsage) => {
     }
   } catch (err) {
     logger.error('[spendStructuredTokens]', err);
+  } finally {
+    try {
+      const costCny = await calculateUsageCostCny({
+        inputTokens: inputUsedTokens,
+        outputTokens: outputUsedTokens,
+        model: txData.model,
+        endpoint: txData.endpoint,
+        valueKey: txData.valueKey,
+        endpointTokenConfig: txData.endpointTokenConfig,
+      });
+      await incrementQuotaUsage(txData.user, {
+        inputTokens: inputUsedTokens,
+        outputTokens: outputUsedTokens,
+        costCny,
+      });
+    } catch (quotaErr) {
+      logger.error('[spendStructuredTokens.quotaUsage]', quotaErr);
+    }
   }
 
   return { prompt, completion };

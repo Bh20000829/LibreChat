@@ -26,6 +26,9 @@ const auth = require('./auth');
 const edit = require('./edit');
 const keys = require('./keys');
 const user = require('./user');
+const quota = require('./quota');
+const modelPricing = require('./modelPricing');
+const userManagement = require('./userManagement');
 const mcp = require('./mcp');
 
 module.exports = {
@@ -34,7 +37,10 @@ module.exports = {
   auth,
   keys,
   user,
+  userManagement,
   tags,
+  quota,
+  modelPricing,
   roles,
   oauth,
   files,
