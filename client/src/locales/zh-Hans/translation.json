@@ -1356,7 +1356,7 @@
   "com_user_mgmt_delete_success": "用户删除成功",
   "com_user_mgmt_generated_password": "自动生成密码",
   "com_user_mgmt_operation_failed": "操作失败",
-  "com_quota_search_placeholder": "按姓名、邮箱、角色搜索",
+  "com_quota_search_placeholder": "按姓名、邮箱、分组搜索",
   "com_quota_users_count": "{{0}} 个用户",
   "com_quota_load_failed": "加载配额数据失败",
   "com_quota_user": "用户",

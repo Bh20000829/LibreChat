@@ -1359,7 +1359,7 @@
   "com_user_mgmt_delete_success": "User deleted successfully",
   "com_user_mgmt_generated_password": "Generated password",
   "com_user_mgmt_operation_failed": "Operation failed",
-  "com_quota_search_placeholder": "Search by name, email, role",
+  "com_quota_search_placeholder": "Search by name, email, group",
   "com_quota_users_count": "{{0}} users",
   "com_quota_load_failed": "Failed to load quota data",
   "com_quota_user": "User",

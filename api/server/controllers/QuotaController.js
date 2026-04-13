@@ -105,7 +105,7 @@ const ensureQuotaRecords = async (userIds) => {
 
 const listUserQuotasController = async (_req, res) => {
   try {
-    const users = await User.find({}, 'name username email role createdAt').sort({ createdAt: -1 }).lean();
+    const users = await User.find({}, 'name username email role groupType createdAt').sort({ createdAt: -1 }).lean();
     const userIds = users.map((user) => user._id);
 
     await ensureQuotaRecords(userIds);
@@ -135,6 +135,7 @@ const listUserQuotasController = async (_req, res) => {
         username: user.username || null,
         email: user.email,
         role: user.role,
+        groupType: user.groupType ?? null,
         dailyQuotaCny: cycleQuotaCny,
         usedTodayCny: usedCycleCny,
         cycleQuotaCny,
