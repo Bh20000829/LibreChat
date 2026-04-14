@@ -8,19 +8,23 @@ export interface IKey extends Document {
 }
 
 const keySchema: Schema<IKey> = new Schema({
+  /** 关联用户 */
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
   },
+  /** 键名称 */
   name: {
     type: String,
     required: true,
   },
+  /** 键值 */
   value: {
     type: String,
     required: true,
   },
+  /** 过期时间 */
   expiresAt: {
     type: Date,
   },

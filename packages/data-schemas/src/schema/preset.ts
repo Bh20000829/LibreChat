@@ -58,28 +58,34 @@ export interface IPreset extends Document {
 
 const presetSchema: Schema<IPreset> = new Schema(
   {
+    /** 预设唯一 ID */
     presetId: {
       type: String,
       unique: true,
       required: true,
       index: true,
     },
+    /** 预设标题 */
     title: {
       type: String,
       default: 'New Chat',
       meiliIndex: true,
     },
+    /** 所属用户（null 表示全局） */
     user: {
       type: String,
       default: null,
     },
+    /** 是否默认预设 */
     defaultPreset: {
       type: Boolean,
     },
+    /** 排序值 */
     order: {
       type: Number,
     },
     ...conversationPreset,
+    /** Agent 额外配置 */
     agentOptions: {
       type: mongoose.Schema.Types.Mixed,
       default: null,

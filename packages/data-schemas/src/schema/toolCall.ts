@@ -16,32 +16,40 @@ export interface IToolCallData extends Document {
 
 const toolCallSchema: Schema<IToolCallData> = new Schema(
   {
+    /** 会话 ID */
     conversationId: {
       type: String,
       required: true,
     },
+    /** 消息 ID */
     messageId: {
       type: String,
       required: true,
     },
+    /** 工具 ID */
     toolId: {
       type: String,
       required: true,
     },
+    /** 所属用户 */
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
     },
+    /** 工具执行结果 */
     result: {
       type: mongoose.Schema.Types.Mixed,
     },
+    /** 关联附件 */
     attachments: {
       type: mongoose.Schema.Types.Mixed,
     },
+    /** 内容块索引 */
     blockIndex: {
       type: Number,
     },
+    /** 分片索引 */
     partIndex: {
       type: Number,
     },

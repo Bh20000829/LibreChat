@@ -4,11 +4,13 @@ import type { IAclEntry } from '~/types';
 
 const aclEntrySchema = new Schema<IAclEntry>(
   {
+    /** 主体类型（用户/组/角色/公开） */
     principalType: {
       type: String,
       enum: Object.values(PrincipalType),
       required: true,
     },
+    /** 主体 ID */
     principalId: {
       type: Schema.Types.Mixed, // Can be ObjectId for users/groups or String for roles
       refPath: 'principalModel',
@@ -17,6 +19,7 @@ const aclEntrySchema = new Schema<IAclEntry>(
       },
       index: true,
     },
+    /** 主体模型 */
     principalModel: {
       type: String,
       enum: Object.values(PrincipalModel),
@@ -24,33 +27,40 @@ const aclEntrySchema = new Schema<IAclEntry>(
         return this.principalType !== PrincipalType.PUBLIC;
       },
     },
+    /** 资源类型 */
     resourceType: {
       type: String,
       enum: Object.values(ResourceType),
       required: true,
     },
+    /** 资源 ID */
     resourceId: {
       type: Schema.Types.ObjectId,
       required: true,
       index: true,
     },
+    /** 权限位 */
     permBits: {
       type: Number,
       default: 1,
     },
+    /** 绑定角色 ID */
     roleId: {
       type: Schema.Types.ObjectId,
       ref: 'AccessRole',
     },
+    /** 继承来源条目 ID */
     inheritedFrom: {
       type: Schema.Types.ObjectId,
       sparse: true,
       index: true,
     },
+    /** 授权人 */
     grantedBy: {
       type: Schema.Types.ObjectId,
       ref: 'User',
     },
+    /** 授权时间 */
     grantedAt: {
       type: Date,
       default: Date.now,

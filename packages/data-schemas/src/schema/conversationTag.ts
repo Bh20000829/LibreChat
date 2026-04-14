@@ -10,22 +10,27 @@ export interface IConversationTag extends Document {
 
 const conversationTag = new Schema<IConversationTag>(
   {
+    /** 标签名称 */
     tag: {
       type: String,
       index: true,
     },
+    /** 所属用户 */
     user: {
       type: String,
       index: true,
     },
+    /** 标签描述 */
     description: {
       type: String,
       index: true,
     },
+    /** 使用次数 */
     count: {
       type: Number,
       default: 0,
     },
+    /** 排序位置 */
     position: {
       type: Number,
       default: 0,

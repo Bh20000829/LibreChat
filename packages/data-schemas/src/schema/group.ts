@@ -3,30 +3,36 @@ import type { IGroup } from '~/types';
 
 const groupSchema = new Schema<IGroup>(
   {
+    /** 组名称 */
     name: {
       type: String,
       required: true,
       index: true,
     },
+    /** 组描述 */
     description: {
       type: String,
       required: false,
     },
+    /** 组邮箱 */
     email: {
       type: String,
       required: false,
       index: true,
     },
+    /** 组头像 */
     avatar: {
       type: String,
       required: false,
     },
+    /** 成员 ID 列表 */
     memberIds: [
       {
         type: String,
         required: false,
       },
     ],
+    /** 数据来源 */
     source: {
       type: String,
       enum: ['local', 'entra'],
