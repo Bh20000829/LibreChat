@@ -31,6 +31,7 @@ const checkBalanceRecord = async function ({
     valueKey,
     endpointTokenConfig,
   });
+  const normalizedTokenCost = Math.max(0, Number(tokenCost) || 0);
 
   const quotaState = await ensureQuotaRecord(user);
 
@@ -41,9 +42,9 @@ const checkBalanceRecord = async function ({
     const nextResetDate = getNextResetBizDate(quotaState);
 
     return {
-      canSpend: remaining > 0,
+      canSpend: remaining >= normalizedTokenCost,
       balance: remaining,
-      tokenCost,
+      tokenCost: normalizedTokenCost,
       dailyQuota: cycleQuota,
       usedToday: usedCycle,
       cycleQuota,
@@ -62,7 +63,7 @@ const checkBalanceRecord = async function ({
     return {
       canSpend: false,
       balance: 0,
-      tokenCost,
+      tokenCost: normalizedTokenCost,
     };
   }
   let balance = record.tokenCredits;
@@ -103,7 +104,11 @@ const checkBalanceRecord = async function ({
   }
 
   logger.debug('[Balance.check] Token cost', { tokenCost });
-  return { canSpend: balance >= tokenCost, balance, tokenCost };
+  return {
+    canSpend: balance >= normalizedTokenCost,
+    balance,
+    tokenCost: normalizedTokenCost,
+  };
 };
 
 /**

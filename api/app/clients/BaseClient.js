@@ -672,10 +672,9 @@ class BaseClient {
     }
 
     const balanceConfig = getBalanceConfig(appConfig);
-    if (
-      balanceConfig?.enabled &&
-      supportsBalanceCheck[this.options.endpointType ?? this.options.endpoint]
-    ) {
+    const endpointForBalanceCheck = this.options.endpointType ?? this.options.endpoint;
+    const isBalanceCheckSupported = supportsBalanceCheck[endpointForBalanceCheck] ?? true;
+    if (balanceConfig?.enabled && isBalanceCheckSupported) {
       await checkBalance({
         req: this.options.req,
         res: this.options.res,

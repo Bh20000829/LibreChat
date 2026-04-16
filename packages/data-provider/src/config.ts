@@ -1127,6 +1127,7 @@ export const modularEndpoints = new Set<EModelEndpoint | string>([
 
 export const supportsBalanceCheck = {
   [EModelEndpoint.custom]: true,
+  [EModelEndpoint.google]: true,
   [EModelEndpoint.openAI]: true,
   [EModelEndpoint.anthropic]: true,
   [EModelEndpoint.gptPlugins]: true,
