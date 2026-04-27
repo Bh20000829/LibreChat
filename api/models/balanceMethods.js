@@ -52,6 +52,7 @@ const checkBalanceRecord = async function ({
       nextResetDate,
       usedInputTokens: Math.max(0, Math.floor(Number(quotaState.usedInputTokens ?? 0))),
       usedOutputTokens: Math.max(0, Math.floor(Number(quotaState.usedOutputTokens ?? 0))),
+      usedCacheTokens: Math.max(0, Math.floor(Number(quotaState.usedCacheTokens ?? 0))),
       quotaMode: true,
     };
   }

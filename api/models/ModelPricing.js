@@ -15,6 +15,12 @@ const modelPricingSchema = new mongoose.Schema(
       min: 0,
       default: 0,
     },
+    cachePrice: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
     outputPrice: {
       type: Number,
       required: true,

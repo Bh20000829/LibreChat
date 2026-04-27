@@ -23,6 +23,7 @@ type QuotaUser = {
   remainingBalanceCny: number;
   usedInputTokens: number;
   usedOutputTokens: number;
+  usedCacheTokens: number;
 };
 
 type QuotaUsersResponse = {
@@ -228,12 +229,13 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
                 )}
 
                 <div className="max-h-[520px] overflow-auto rounded-lg border border-border-light">
-                  <table className="min-w-[1500px] divide-y divide-border-light text-sm">
+                  <table className="min-w-[1580px] divide-y divide-border-light text-sm">
                     <thead className="bg-surface-secondary text-left text-text-secondary">
                       <tr>
                         <th className="sticky top-0 z-10 px-3 py-3 font-medium bg-surface-secondary">{localize('com_quota_user')}</th>
                         <th className="sticky top-0 z-10 px-3 py-3 font-medium bg-surface-secondary">{localize('com_user_mgmt_group_type')}</th>
                         <th className="sticky top-0 z-10 min-w-[80px] px-3 py-3 font-medium bg-surface-secondary">{localize('com_quota_used_input_tokens')}</th>
+                        <th className="sticky top-0 z-10 min-w-[80px] px-3 py-3 font-medium bg-surface-secondary">Cache Tokens</th>
                         <th className="sticky top-0 z-10 min-w-[80px] px-3 py-3 font-medium bg-surface-secondary">{localize('com_quota_used_output_tokens')}</th>
                         <th className="sticky top-0 z-10 px-3 py-3 font-medium bg-surface-secondary">{localize('com_quota_used_today_rmb')}</th>
                         <th className="sticky top-0 z-10 w-[96px] min-w-[96px] px-2 py-3 font-medium bg-surface-secondary">{localize('com_quota_used_month_rmb')}</th>
@@ -253,7 +255,7 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
                     <tbody className="divide-y divide-border-light bg-background text-text-primary">
                       {usersQuery.isLoading && (
                         <tr>
-                          <td className="px-3 py-8 text-center text-text-secondary" colSpan={12}>
+                          <td className="px-3 py-8 text-center text-text-secondary" colSpan={13}>
                             {localize('com_ui_loading')}
                           </td>
                         </tr>
@@ -261,7 +263,7 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
 
                       {!usersQuery.isLoading && filteredUsers.length === 0 && (
                         <tr>
-                          <td className="px-3 py-8 text-center text-text-secondary" colSpan={12}>
+                          <td className="px-3 py-8 text-center text-text-secondary" colSpan={13}>
                             {localize('com_quota_no_users')}
                           </td>
                         </tr>
@@ -280,6 +282,7 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
                             </td>
                             <td className="px-3 py-3">{user.groupType ?? '-'}</td>
                             <td className="min-w-[80px] px-3 py-3">{formatNumber(user.usedInputTokens)}</td>
+                            <td className="min-w-[80px] px-3 py-3">{formatNumber(user.usedCacheTokens ?? 0)}</td>
                             <td className="min-w-[80px] px-3 py-3">{formatNumber(user.usedOutputTokens)}</td>
                             <td className="px-3 py-3">{formatMoney4(usedCycleCny)}</td>
                             <td className="w-[96px] min-w-[96px] px-2 py-3">{formatMoney4(user.usedMonthCny ?? 0)}</td>

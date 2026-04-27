@@ -88,6 +88,7 @@ const ensureQuotaRecords = async (userIds) => {
           lastMonthCny: 0,
           usedInputTokens: 0,
           usedOutputTokens: 0,
+          usedCacheTokens: 0,
           bizDate,
           bizMonth,
           lastMonthBizMonth: null,
@@ -128,6 +129,7 @@ const listUserQuotasController = async (_req, res) => {
       const remainingBalanceCny = Math.max(0, Number(quota?.remainingBalanceCny ?? cycleQuotaCny));
       const usedInputTokens = Math.max(0, Math.floor(Number(quota?.usedInputTokens ?? 0)));
       const usedOutputTokens = Math.max(0, Math.floor(Number(quota?.usedOutputTokens ?? 0)));
+      const usedCacheTokens = Math.max(0, Math.floor(Number(quota?.usedCacheTokens ?? 0)));
 
       return {
         id: String(user._id),
@@ -145,6 +147,7 @@ const listUserQuotasController = async (_req, res) => {
         remainingBalanceCny,
         usedInputTokens,
         usedOutputTokens,
+        usedCacheTokens,
         bizDate: quota?.bizDate ?? getBizDate(),
         quotaStartDate: quota?.quotaStartDate ?? defaultQuotaStartDate,
         quotaCycleDays: Math.max(1, Math.floor(Number(quota?.quotaCycleDays ?? defaultQuotaCycleDays))),
@@ -234,6 +237,7 @@ const updateUserQuotaController = async (req, res) => {
       updates.usedCycleCny = 0;
       updates.usedInputTokens = 0;
       updates.usedOutputTokens = 0;
+      updates.usedCacheTokens = 0;
       updates.remainingBalanceCny = Math.max(0, nextCycleQuota);
       updates.bizDate = bizDate;
       updates.lastResetBizDate = bizDate;
@@ -258,6 +262,7 @@ const updateUserQuotaController = async (req, res) => {
       Number(updated?.cycleQuotaCny ?? updated?.dailyQuotaCny ?? getDefaultDailyQuotaCny()),
     );
     const normalizedUsedCycleCny = Math.max(0, Number(updated?.usedCycleCny ?? updated?.usedTodayCny ?? 0));
+    const normalizedUsedCacheTokens = Math.max(0, Math.floor(Number(updated?.usedCacheTokens ?? 0)));
 
     return res.status(200).json({
       id: String(updated.user),
@@ -265,6 +270,7 @@ const updateUserQuotaController = async (req, res) => {
       cycleQuotaCny: normalizedCycleQuotaCny,
       usedTodayCny: normalizedUsedCycleCny,
       usedCycleCny: normalizedUsedCycleCny,
+      usedCacheTokens: normalizedUsedCacheTokens,
       remainingBalanceCny: updated.remainingBalanceCny,
       quotaStartDate: updated.quotaStartDate,
       quotaCycleDays: Math.max(1, Math.floor(Number(updated.quotaCycleDays ?? getDefaultQuotaCycleDays()))),
@@ -299,6 +305,9 @@ const getMyQuotaController = async (req, res) => {
       usedTodayCny: Math.max(0, Number(quota?.usedCycleCny ?? quota?.usedTodayCny ?? 0)),
       cycleQuotaCny: Math.max(0, Number(quota?.cycleQuotaCny ?? quota?.dailyQuotaCny ?? getDefaultDailyQuotaCny())),
       usedCycleCny: Math.max(0, Number(quota?.usedCycleCny ?? quota?.usedTodayCny ?? 0)),
+      usedInputTokens: Math.max(0, Math.floor(Number(quota?.usedInputTokens ?? 0))),
+      usedOutputTokens: Math.max(0, Math.floor(Number(quota?.usedOutputTokens ?? 0))),
+      usedCacheTokens: Math.max(0, Math.floor(Number(quota?.usedCacheTokens ?? 0))),
       quotaStartDate: quota?.quotaStartDate,
       quotaCycleDays: Math.max(1, Math.floor(Number(quota?.quotaCycleDays ?? getDefaultQuotaCycleDays()))),
       bizDate: quota?.bizDate ?? getBizDate(),

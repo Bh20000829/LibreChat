@@ -15,7 +15,7 @@ const { calculateUsageCostCny } = require('./pricingUtils');
  * @throws {Error} - Throws an error if there's an issue creating the transactions.
  */
 const spendTokens = async (txData, tokenUsage) => {
-  const { promptTokens, completionTokens } = tokenUsage;
+  const { promptTokens, completionTokens, cacheTokens } = tokenUsage;
   logger.debug(
     `[spendTokens] conversationId: ${txData.conversationId}${
       txData?.context ? ` | Context: ${txData?.context}` : ''
@@ -28,6 +28,7 @@ const spendTokens = async (txData, tokenUsage) => {
   let prompt, completion;
   const inputUsedTokens = Math.max(0, promptTokens ?? 0);
   const outputUsedTokens = Math.max(0, completionTokens ?? 0);
+  const cacheUsedTokens = Math.max(0, cacheTokens ?? 0);
   try {
     if (promptTokens !== undefined) {
       prompt = await createTransaction({
@@ -64,6 +65,7 @@ const spendTokens = async (txData, tokenUsage) => {
       const costCny = await calculateUsageCostCny({
         inputTokens: inputUsedTokens,
         outputTokens: outputUsedTokens,
+        cacheTokens: cacheUsedTokens,
         model: txData.model,
         endpoint: txData.endpoint,
         valueKey: txData.valueKey,
@@ -72,6 +74,7 @@ const spendTokens = async (txData, tokenUsage) => {
       await incrementQuotaUsage(txData.user, {
         inputTokens: inputUsedTokens,
         outputTokens: outputUsedTokens,
+        cacheTokens: cacheUsedTokens,
         costCny,
       });
     } catch (quotaErr) {
@@ -107,10 +110,10 @@ const spendStructuredTokens = async (txData, tokenUsage) => {
     },
   );
   let prompt, completion;
-  const inputUsedTokens =
-    Math.max(0, promptTokens?.input ?? 0) +
-    Math.max(0, promptTokens?.write ?? 0) +
-    Math.max(0, promptTokens?.read ?? 0);
+  const inputUsedTokens = Math.max(0, promptTokens?.input ?? 0);
+  const cacheWriteTokens = Math.max(0, promptTokens?.write ?? 0);
+  const cacheReadTokens = Math.max(0, promptTokens?.read ?? 0);
+  const cacheUsedTokens = cacheWriteTokens + cacheReadTokens;
   const outputUsedTokens = Math.max(0, completionTokens ?? 0);
   try {
     if (promptTokens) {
@@ -151,6 +154,8 @@ const spendStructuredTokens = async (txData, tokenUsage) => {
       const costCny = await calculateUsageCostCny({
         inputTokens: inputUsedTokens,
         outputTokens: outputUsedTokens,
+        cacheWriteTokens,
+        cacheReadTokens,
         model: txData.model,
         endpoint: txData.endpoint,
         valueKey: txData.valueKey,
@@ -159,6 +164,7 @@ const spendStructuredTokens = async (txData, tokenUsage) => {
       await incrementQuotaUsage(txData.user, {
         inputTokens: inputUsedTokens,
         outputTokens: outputUsedTokens,
+        cacheTokens: cacheUsedTokens,
         costCny,
       });
     } catch (quotaErr) {

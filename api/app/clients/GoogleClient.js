@@ -697,6 +697,10 @@ class GoogleClient extends BaseClient {
           signal: abortController.signal,
         });
         for await (const chunk of result.stream) {
+          // LC_DEBUG_RAW_RESPONSE_DELETE_ME
+          console.log('[LC_DEBUG_RAW_RESPONSE_DELETE_ME][google][genai_stream_chunk]', {
+            data: chunk,
+          });
           usageMetadata = !usageMetadata
             ? chunk?.usageMetadata
             : Object.assign(usageMetadata, chunk?.usageMetadata);
@@ -747,6 +751,10 @@ class GoogleClient extends BaseClient {
       }
 
       for await (const chunk of stream) {
+        // LC_DEBUG_RAW_RESPONSE_DELETE_ME
+        console.log('[LC_DEBUG_RAW_RESPONSE_DELETE_ME][google][vertex_stream_chunk]', {
+          data: chunk,
+        });
         if (chunk?.usage_metadata) {
           const metadata = chunk.usage_metadata;
           for (const key in metadata) {

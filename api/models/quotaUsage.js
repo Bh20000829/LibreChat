@@ -157,6 +157,7 @@ const ensureQuotaRecord = async (user) => {
           lastMonthCny: 0,
           usedInputTokens: 0,
           usedOutputTokens: 0,
+          usedCacheTokens: 0,
           bizDate,
           bizMonth,
           lastMonthBizMonth: null,
@@ -180,6 +181,7 @@ const ensureQuotaRecord = async (user) => {
     quota.lastMonthCny == null ||
     quota.usedInputTokens == null ||
     quota.usedOutputTokens == null ||
+    quota.usedCacheTokens == null ||
     quota.quotaCycleDays == null
   ) {
     const cycleQuotaCny =
@@ -213,6 +215,8 @@ const ensureQuotaRecord = async (user) => {
             quota.usedInputTokens == null ? 0 : Math.max(0, Math.floor(Number(quota.usedInputTokens) || 0)),
           usedOutputTokens:
             quota.usedOutputTokens == null ? 0 : Math.max(0, Math.floor(Number(quota.usedOutputTokens) || 0)),
+          usedCacheTokens:
+            quota.usedCacheTokens == null ? 0 : Math.max(0, Math.floor(Number(quota.usedCacheTokens) || 0)),
           bizMonth: quota.bizMonth || bizMonth,
           lastMonthBizMonth: quota.lastMonthBizMonth || null,
           quotaStartDate: normalizeBizDateString(quota.quotaStartDate) || defaultQuotaStartDate,
@@ -258,6 +262,7 @@ const ensureQuotaRecord = async (user) => {
           usedCycleCny: 0,
           usedInputTokens: 0,
           usedOutputTokens: 0,
+          usedCacheTokens: 0,
           remainingBalanceCny: roundMoney8(Math.max(0, cycleQuotaCny)),
           bizDate,
           dailyQuotaCny: cycleQuotaCny,
@@ -290,10 +295,11 @@ const ensureQuotaRecord = async (user) => {
 const incrementQuotaUsage = async (user, usage) => {
   const inputTokens = Math.max(0, Math.floor(Number(usage?.inputTokens) || 0));
   const outputTokens = Math.max(0, Math.floor(Number(usage?.outputTokens) || 0));
+  const cacheTokens = Math.max(0, Math.floor(Number(usage?.cacheTokens) || 0));
   const costCnyRaw = Number(usage?.costCny);
   const costCny = Number.isFinite(costCnyRaw) && costCnyRaw > 0 ? roundMoney8(costCnyRaw) : 0;
 
-  if (inputTokens === 0 && outputTokens === 0 && costCny === 0) {
+  if (inputTokens === 0 && outputTokens === 0 && cacheTokens === 0 && costCny === 0) {
     return;
   }
 
@@ -306,6 +312,7 @@ const incrementQuotaUsage = async (user, usage) => {
   const nextUsedMonth = roundMoney8(Math.max(0, Number(quota?.usedMonthCny ?? 0)) + costCny);
   const nextInputTokens = Math.max(0, Math.floor(Number(quota?.usedInputTokens ?? 0)) + inputTokens);
   const nextOutputTokens = Math.max(0, Math.floor(Number(quota?.usedOutputTokens ?? 0)) + outputTokens);
+  const nextCacheTokens = Math.max(0, Math.floor(Number(quota?.usedCacheTokens ?? 0)) + cacheTokens);
 
   await UserQuota.findOneAndUpdate(
     { user },
@@ -313,6 +320,7 @@ const incrementQuotaUsage = async (user, usage) => {
       $set: {
         usedInputTokens: nextInputTokens,
         usedOutputTokens: nextOutputTokens,
+        usedCacheTokens: nextCacheTokens,
         usedTodayCny: nextUsedCycle,
         usedCycleCny: nextUsedCycle,
         usedMonthCny: nextUsedMonth,

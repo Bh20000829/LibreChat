@@ -1029,6 +1029,10 @@ class OpenAIClient extends BaseClient {
             handleOpenAIErrors(err, errorCallback, 'stream');
           })
           .on('finalChatCompletion', async (finalChatCompletion) => {
+            // LC_DEBUG_RAW_RESPONSE_DELETE_ME
+            console.log('[LC_DEBUG_RAW_RESPONSE_DELETE_ME][openai][finalChatCompletion]', {
+              data: finalChatCompletion,
+            });
             const finalMessage = finalChatCompletion?.choices?.[0]?.message;
             if (!finalMessage) {
               return;
@@ -1068,6 +1072,10 @@ class OpenAIClient extends BaseClient {
         }
 
         for await (const chunk of stream) {
+          // LC_DEBUG_RAW_RESPONSE_DELETE_ME
+          console.log('[LC_DEBUG_RAW_RESPONSE_DELETE_ME][openai][stream_chunk]', {
+            data: chunk,
+          });
           // Add finish_reason: null if missing in any choice
           if (chunk.choices) {
             chunk.choices.forEach((choice) => {
@@ -1102,6 +1110,10 @@ class OpenAIClient extends BaseClient {
           .catch((err) => {
             handleOpenAIErrors(err, errorCallback, 'create');
           });
+        // LC_DEBUG_RAW_RESPONSE_DELETE_ME
+        console.log('[LC_DEBUG_RAW_RESPONSE_DELETE_ME][openai][completion_response]', {
+          data: chatCompletion,
+        });
       }
 
       if (openai.abortHandler && abortController.signal) {

@@ -18,6 +18,7 @@ const listModelPricingController = async (_req, res) => {
         id: String(item._id),
         modelName: item.modelName,
         inputPrice: item.inputPrice,
+        cachePrice: item.cachePrice,
         outputPrice: item.outputPrice,
         multiplier: item.multiplier,
         createdAt: item.createdAt,
@@ -31,7 +32,7 @@ const listModelPricingController = async (_req, res) => {
 
 const createModelPricingController = async (req, res) => {
   try {
-    const { modelName, inputPrice, outputPrice, multiplier } = req.body || {};
+    const { modelName, inputPrice, cachePrice, outputPrice, multiplier } = req.body || {};
 
     if (!modelName || typeof modelName !== 'string' || modelName.trim().length === 0) {
       return res.status(400).json({ message: 'modelName is required' });
@@ -40,6 +41,7 @@ const createModelPricingController = async (req, res) => {
     const payload = {
       modelName: modelName.trim(),
       inputPrice: normalizeNumber(inputPrice, 'inputPrice'),
+      cachePrice: normalizeNumber(cachePrice ?? 0, 'cachePrice'),
       outputPrice: normalizeNumber(outputPrice, 'outputPrice'),
       multiplier: normalizeNumber(multiplier, 'multiplier'),
       createdBy: req.user?._id ?? req.user?.id,
@@ -52,6 +54,7 @@ const createModelPricingController = async (req, res) => {
       id: String(created._id),
       modelName: created.modelName,
       inputPrice: created.inputPrice,
+      cachePrice: created.cachePrice,
       outputPrice: created.outputPrice,
       multiplier: created.multiplier,
       createdAt: created.createdAt,
@@ -71,7 +74,7 @@ const createModelPricingController = async (req, res) => {
 const updateModelPricingController = async (req, res) => {
   try {
     const { modelPricingId } = req.params;
-    const { modelName, inputPrice, outputPrice, multiplier } = req.body || {};
+    const { modelName, inputPrice, cachePrice, outputPrice, multiplier } = req.body || {};
 
     if (!mongoose.Types.ObjectId.isValid(modelPricingId)) {
       return res.status(400).json({ message: 'Invalid modelPricingId' });
@@ -88,6 +91,10 @@ const updateModelPricingController = async (req, res) => {
 
     if (inputPrice != null) {
       updates.inputPrice = normalizeNumber(inputPrice, 'inputPrice');
+    }
+
+    if (cachePrice != null) {
+      updates.cachePrice = normalizeNumber(cachePrice, 'cachePrice');
     }
 
     if (outputPrice != null) {
@@ -118,6 +125,7 @@ const updateModelPricingController = async (req, res) => {
       id: String(updated._id),
       modelName: updated.modelName,
       inputPrice: updated.inputPrice,
+      cachePrice: updated.cachePrice,
       outputPrice: updated.outputPrice,
       multiplier: updated.multiplier,
       updatedAt: updated.updatedAt,
@@ -133,8 +141,32 @@ const updateModelPricingController = async (req, res) => {
   }
 };
 
+const deleteModelPricingController = async (req, res) => {
+  try {
+    const { modelPricingId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(modelPricingId)) {
+      return res.status(400).json({ message: 'Invalid modelPricingId' });
+    }
+
+    const deleted = await ModelPricing.findByIdAndDelete(modelPricingId).lean();
+    if (!deleted) {
+      return res.status(404).json({ message: 'Model pricing not found' });
+    }
+
+    return res.status(200).json({
+      id: String(deleted._id),
+      modelName: deleted.modelName,
+      message: 'Model pricing deleted',
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to delete model pricing', error: error.message });
+  }
+};
+
 module.exports = {
   listModelPricingController,
   createModelPricingController,
   updateModelPricingController,
+  deleteModelPricingController,
 };

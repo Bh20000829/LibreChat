@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react';
-import { Search, BadgeDollarSign, Save, Plus } from 'lucide-react';
+import { Search, BadgeDollarSign, Save, Plus, Trash2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TDialogProps } from '~/common';
 import { useLocalize } from '~/hooks';
@@ -11,6 +11,7 @@ type ModelPricingRow = {
   id?: string;
   modelName: string;
   inputPrice: string;
+  cachePrice: string;
   outputPrice: string;
   multiplier: string;
 };
@@ -37,6 +38,7 @@ const getModelPricing = async (token?: string): Promise<ModelPricingResponse> =>
 const createEmptyRow = (): ModelPricingRow => ({
   modelName: '',
   inputPrice: '0',
+  cachePrice: '0',
   outputPrice: '0',
   multiplier: '1',
 });
@@ -59,6 +61,7 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
   const [rows, setRows] = useState<ModelPricingRow[]>([]);
   const [query, setQuery] = useState('');
   const [statusText, setStatusText] = useState('');
+  const [busyRowKey, setBusyRowKey] = useState<string | null>(null);
 
   const pricingQuery = useQuery<ModelPricingResponse>({
     queryKey: ['model-pricing'],
@@ -73,6 +76,7 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
         pricingQuery.data.records.map((row) => ({
           ...row,
           inputPrice: String(row.inputPrice ?? 0),
+          cachePrice: String(row.cachePrice ?? 0),
           outputPrice: String(row.outputPrice ?? 0),
           multiplier: String(row.multiplier ?? 1),
         })),
@@ -80,35 +84,32 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
     }
   }, [pricingQuery.data]);
 
-  const saveMutation = useMutation({
-    mutationFn: async (payload: ModelPricingRow[]) => {
-      const validRows = payload.filter((row) => row.modelName.trim().length > 0);
+  const saveRowMutation = useMutation({
+    mutationFn: async (row: ModelPricingRow) => {
+      const endpoint = row.id ? `/api/model-pricing/${row.id}` : '/api/model-pricing';
+      const method = row.id ? 'PUT' : 'POST';
 
-      await Promise.all(
-        validRows.map(async (row) => {
-          const endpoint = row.id ? `/api/model-pricing/${row.id}` : '/api/model-pricing';
-          const method = row.id ? 'PUT' : 'POST';
-
-          const response = await fetch(endpoint, {
-            method,
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({
-              modelName: row.modelName.trim(),
-              inputPrice: parseNonNegativeDecimal(row.inputPrice, 'inputPrice'),
-              outputPrice: parseNonNegativeDecimal(row.outputPrice, 'outputPrice'),
-              multiplier: parseNonNegativeDecimal(row.multiplier, 'multiplier'),
-            }),
-          });
-
-          if (!response.ok) {
-            const data = await response.json().catch(() => ({}));
-            throw new Error(data?.message ?? 'Failed to save model pricing');
-          }
+      const response = await fetch(endpoint, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          modelName: row.modelName.trim(),
+          inputPrice: parseNonNegativeDecimal(row.inputPrice, 'inputPrice'),
+          cachePrice: parseNonNegativeDecimal(row.cachePrice, 'cachePrice'),
+          outputPrice: parseNonNegativeDecimal(row.outputPrice, 'outputPrice'),
+          multiplier: parseNonNegativeDecimal(row.multiplier, 'multiplier'),
         }),
-      );
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.message ?? 'Failed to save model pricing');
+      }
+
+      return response.json();
     },
     onSuccess: async () => {
       setStatusText(localize('com_model_pricing_save_success'));
@@ -120,6 +121,41 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
         return;
       }
       setStatusText(localize('com_model_pricing_save_failed'));
+    },
+    onSettled: () => {
+      setBusyRowKey(null);
+    },
+  });
+
+  const deleteRowMutation = useMutation({
+    mutationFn: async (rowId: string) => {
+      const response = await fetch(`/api/model-pricing/${rowId}`, {
+        method: 'DELETE',
+        headers: token
+          ? {
+              Authorization: `Bearer ${token}`,
+            }
+          : undefined,
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.message ?? 'Failed to delete model pricing');
+      }
+    },
+    onSuccess: async () => {
+      setStatusText(localize('com_ui_delete_success'));
+      await queryClient.invalidateQueries({ queryKey: ['model-pricing'] });
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setStatusText(error.message);
+        return;
+      }
+      setStatusText(localize('com_ui_delete_not_allowed'));
+    },
+    onSettled: () => {
+      setBusyRowKey(null);
     },
   });
 
@@ -136,6 +172,27 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
 
   const updateRow = (index: number, updates: Partial<ModelPricingRow>) => {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...updates } : row)));
+  };
+
+  const handleSaveRow = (row: ModelPricingRow) => {
+    if (row.modelName.trim().length === 0) {
+      setStatusText('modelName is required');
+      return;
+    }
+    const rowKey = row.id ?? `new:${row.modelName}`;
+    setBusyRowKey(rowKey);
+    saveRowMutation.mutate(row);
+  };
+
+  const handleDeleteRow = (row: ModelPricingRow, rowIndex: number) => {
+    if (!row.id) {
+      setRows((prev) => prev.filter((_, i) => i !== rowIndex));
+      setStatusText(localize('com_ui_delete_success'));
+      return;
+    }
+
+    setBusyRowKey(row.id);
+    deleteRowMutation.mutate(row.id);
   };
 
   return (
@@ -163,7 +220,7 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
           <div className="fixed inset-0 flex w-screen items-center justify-center p-4">
             <DialogPanel
               className={cn(
-                'w-full max-w-5xl overflow-hidden rounded-xl rounded-b-lg bg-background shadow-2xl backdrop-blur-2xl animate-in sm:rounded-2xl',
+                'w-full max-w-[88vw] xl:max-w-[84rem] overflow-hidden rounded-xl rounded-b-lg bg-background shadow-2xl backdrop-blur-2xl animate-in sm:rounded-2xl',
               )}
             >
               <DialogTitle className="flex items-center justify-between border-b border-border-light px-6 py-4" as="div">
@@ -227,20 +284,22 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                 )}
 
                 <div className="max-h-[520px] overflow-auto rounded-lg border border-border-light">
-                  <table className="min-w-full divide-y divide-border-light text-sm">
+                  <table className="min-w-[1180px] divide-y divide-border-light text-sm">
                     <thead className="bg-surface-secondary text-left text-text-secondary">
                       <tr>
                         <th className="px-4 py-3 font-medium">{localize('com_model_pricing_model_name')}</th>
                         <th className="px-4 py-3 font-medium">{localize('com_model_pricing_input_price')}</th>
+                        <th className="px-4 py-3 font-medium">缓存单价 (USD/1M Tokens)</th>
                         <th className="px-4 py-3 font-medium">{localize('com_model_pricing_output_price')}</th>
                         <th className="px-4 py-3 font-medium">{localize('com_model_pricing_multiplier')}</th>
+                        <th className="px-4 py-3 font-medium">{localize('com_user_mgmt_actions')}</th>
                       </tr>
                     </thead>
 
                     <tbody className="divide-y divide-border-light bg-background text-text-primary">
                       {pricingQuery.isLoading && (
                         <tr>
-                          <td className="px-4 py-8 text-center text-text-secondary" colSpan={4}>
+                          <td className="px-4 py-8 text-center text-text-secondary" colSpan={6}>
                             {localize('com_ui_loading')}
                           </td>
                         </tr>
@@ -248,7 +307,7 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
 
                       {!pricingQuery.isLoading && filteredRows.length === 0 && (
                         <tr>
-                          <td className="px-4 py-8 text-center text-text-secondary" colSpan={4}>
+                          <td className="px-4 py-8 text-center text-text-secondary" colSpan={6}>
                             {localize('com_model_pricing_no_rows')}
                           </td>
                         </tr>
@@ -284,6 +343,21 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                               <input
                                 type="text"
                                 inputMode="decimal"
+                                value={row.cachePrice}
+                                onChange={(e) => {
+                                  const nextValue = e.target.value.trim();
+                                  if (!decimalInputPattern.test(nextValue)) {
+                                    return;
+                                  }
+                                  updateRow(rowIndex, { cachePrice: nextValue });
+                                }}
+                                className="h-9 w-40 rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="text"
+                                inputMode="decimal"
                                 value={row.outputPrice}
                                 onChange={(e) => {
                                   const nextValue = e.target.value.trim();
@@ -310,6 +384,36 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                                 className="h-9 w-32 rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
                               />
                             </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveRow(row)}
+                                  disabled={
+                                    saveRowMutation.isLoading ||
+                                    deleteRowMutation.isLoading ||
+                                    busyRowKey === (row.id ?? `new:${row.modelName}`)
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-md bg-surface-tertiary px-2 py-1 text-xs text-text-primary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Save className="h-3.5 w-3.5" />
+                                  {row.id ? localize('com_user_mgmt_update') : localize('com_model_pricing_add')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRow(row, rowIndex)}
+                                  disabled={
+                                    saveRowMutation.isLoading ||
+                                    deleteRowMutation.isLoading ||
+                                    busyRowKey === (row.id ?? `new:${row.modelName}`)
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-md border border-border-light px-2 py-1 text-xs text-text-primary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  {localize('com_ui_delete')}
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}
@@ -319,17 +423,7 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
 
                 <div className="flex items-center justify-between rounded-lg border border-border-light bg-surface-secondary px-4 py-3 text-sm">
                   <span className="text-text-secondary">{statusText}</span>
-                  <button
-                    type="button"
-                    onClick={() => saveMutation.mutate(rows)}
-                    disabled={saveMutation.isLoading || pricingQuery.isLoading}
-                    className="inline-flex items-center gap-2 rounded-md bg-surface-tertiary px-3 py-2 text-text-primary hover:bg-surface-hover"
-                  >
-                    <Save className="h-4 w-4" />
-                    {saveMutation.isLoading
-                      ? localize('com_ui_loading')
-                      : localize('com_quota_save_changes')}
-                  </button>
+                  <span className="text-text-secondary text-xs">按行保存/删除生效</span>
                 </div>
               </div>
             </DialogPanel>

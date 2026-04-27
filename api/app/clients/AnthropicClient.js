@@ -834,6 +834,10 @@ class AnthropicClient extends BaseClient {
           });
 
           for await (const completion of response) {
+            // LC_DEBUG_RAW_RESPONSE_DELETE_ME
+            console.log('[LC_DEBUG_RAW_RESPONSE_DELETE_ME][anthropic][stream_event]', {
+              data: completion,
+            });
             const type = completion?.type ?? '';
             if (tokenEventTypes.has(type)) {
               logger.debug(`[AnthropicClient] ${type}`, completion);

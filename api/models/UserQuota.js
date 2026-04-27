@@ -63,6 +63,12 @@ const userQuotaSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    usedCacheTokens: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
+    },
     bizDate: {
       type: String,
       required: false,
