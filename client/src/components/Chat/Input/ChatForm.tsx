@@ -1,8 +1,13 @@
 import { memo, useRef, useMemo, useEffect, useState, useCallback } from 'react';
 import { useWatch } from 'react-hook-form';
-import { TextareaAutosize } from '@librechat/client';
+import { TextareaAutosize, Dropdown } from '@librechat/client';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { Constants, isAssistantsEndpoint, isAgentsEndpoint } from 'librechat-data-provider';
+import {
+  Constants,
+  EModelEndpoint,
+  isAssistantsEndpoint,
+  isAgentsEndpoint,
+} from 'librechat-data-provider';
 import {
   useChatContext,
   useChatFormContext,
@@ -18,6 +23,7 @@ import {
   useQueryParams,
   useSubmitMessage,
   useFocusChatEffect,
+  useSetIndexOptions,
 } from '~/hooks';
 import { mainTextareaId, BadgeItem } from '~/common';
 import AttachFileChat from './Files/AttachFileChat';
@@ -36,10 +42,21 @@ import Mention from './Mention';
 import store from '~/store';
 
 const ChatForm = memo(({ index = 0 }: { index?: number }) => {
+  const imageSizeOptions = useMemo(
+    () => [
+      { value: '1:1', label: '1:1' },
+      { value: '16:9', label: '16:9' },
+      { value: '9:16', label: '9:16' },
+      { value: '4:3', label: '4:3' },
+      { value: '3:4', label: '3:4' },
+    ],
+    [],
+  );
   const submitButtonRef = useRef<HTMLButtonElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   useFocusChatEffect(textAreaRef);
   const localize = useLocalize();
+  const { setOption } = useSetIndexOptions();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [, setIsScrollable] = useState(false);
@@ -91,6 +108,10 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
   const conversationId = useMemo(
     () => conversation?.conversationId ?? Constants.NEW_CONVO,
     [conversation?.conversationId],
+  );
+  const imageModeEnabled = useMemo(
+    () => conversation?.mode === 'image' && conversation?.endpoint === EModelEndpoint.openAI,
+    [conversation?.mode, conversation?.endpoint],
   );
 
   const isRTL = useMemo(
@@ -318,20 +339,34 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
                 isRTL ? 'flex-row-reverse' : 'flex-row',
               )}
             >
-              <div className={`${isRTL ? 'mr-2' : 'ml-2'}`}>
+              <div className={cn('flex items-center gap-2', isRTL ? 'mr-2' : 'ml-2')}>
                 <AttachFileChat conversation={conversation} disableInputs={disableInputs} />
+                {imageModeEnabled && (
+                  <Dropdown
+                    value={conversation?.imageSize ?? '1:1'}
+                    onChange={setOption('imageSize')}
+                    options={imageSizeOptions}
+                    ariaLabel={localize('com_ui_size')}
+                    className="min-w-[92px] border-transparent bg-transparent text-text-primary/85 hover:bg-surface-hover/50"
+                    sizeClasses="w-[140px]"
+                  />
+                )}
               </div>
-              <BadgeRow
-                showEphemeralBadges={!isAgentsEndpoint(endpoint) && !isAssistantsEndpoint(endpoint)}
-                isSubmitting={isSubmitting || isSubmittingAdded}
-                conversationId={conversationId}
-                onChange={setBadges}
-                isInChat={
-                  Array.isArray(conversation?.messages) && conversation.messages.length >= 1
-                }
-              />
+              {!imageModeEnabled && (
+                <BadgeRow
+                  showEphemeralBadges={
+                    !isAgentsEndpoint(endpoint) && !isAssistantsEndpoint(endpoint)
+                  }
+                  isSubmitting={isSubmitting || isSubmittingAdded}
+                  conversationId={conversationId}
+                  onChange={setBadges}
+                  isInChat={
+                    Array.isArray(conversation?.messages) && conversation.messages.length >= 1
+                  }
+                />
+              )}
               <div className="mx-auto flex" />
-              {SpeechToText && (
+              {!imageModeEnabled && SpeechToText && (
                 <AudioRecorder
                   methods={methods}
                   ask={submitMessage}

@@ -691,6 +691,7 @@ const DocumentType: z.ZodType<DocumentTypeValue> = z.lazy(() =>
 export const tConversationSchema = z.object({
   conversationId: z.string().nullable(),
   mode: z.enum(['chat', 'image']).default('chat').optional(),
+  imageSize: z.enum(['1:1', '16:9', '9:16', '4:3', '3:4']).optional(),
   endpoint: eModelEndpointSchema.nullable(),
   endpointType: eModelEndpointSchema.nullable().optional(),
   isArchived: z.boolean().optional(),

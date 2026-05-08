@@ -190,6 +190,9 @@ export default function useChatFunctions({
       endpointOption.key = getExpiry();
       endpointOption.thread_id = thread_id;
       endpointOption.modelDisplayLabel = modelDisplayLabel;
+      if (conversation?.mode === 'image') {
+        endpointOption.imageSize = conversation?.imageSize ?? '1:1';
+      }
     } else {
       endpointOption.key = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     }
