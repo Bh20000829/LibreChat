@@ -8,8 +8,10 @@ const { getLogStores } = require('~/cache');
  * @returns {Promise<TModelsConfig>} The models config.
  */
 const getModelsConfig = async (req) => {
+  const mode = req.query?.mode === 'image' ? 'image' : 'chat';
   const cache = getLogStores(CacheKeys.CONFIG_STORE);
-  let modelsConfig = await cache.get(CacheKeys.MODELS_CONFIG);
+  const cacheKey = `${CacheKeys.MODELS_CONFIG}:${mode}`;
+  let modelsConfig = await cache.get(cacheKey);
   if (!modelsConfig) {
     modelsConfig = await loadModels(req);
   }
@@ -23,8 +25,10 @@ const getModelsConfig = async (req) => {
  * @returns {Promise<TModelsConfig>} The models config.
  */
 async function loadModels(req) {
+  const mode = req.query?.mode === 'image' ? 'image' : 'chat';
   const cache = getLogStores(CacheKeys.CONFIG_STORE);
-  const cachedModelsConfig = await cache.get(CacheKeys.MODELS_CONFIG);
+  const cacheKey = `${CacheKeys.MODELS_CONFIG}:${mode}`;
+  const cachedModelsConfig = await cache.get(cacheKey);
   if (cachedModelsConfig) {
     return cachedModelsConfig;
   }
@@ -33,7 +37,7 @@ async function loadModels(req) {
 
   const modelConfig = { ...defaultModelsConfig, ...customModelsConfig };
 
-  await cache.set(CacheKeys.MODELS_CONFIG, modelConfig);
+  await cache.set(cacheKey, modelConfig);
   return modelConfig;
 }
 

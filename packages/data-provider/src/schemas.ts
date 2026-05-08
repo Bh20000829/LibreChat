@@ -690,6 +690,7 @@ const DocumentType: z.ZodType<DocumentTypeValue> = z.lazy(() =>
 
 export const tConversationSchema = z.object({
   conversationId: z.string().nullable(),
+  mode: z.enum(['chat', 'image']).default('chat').optional(),
   endpoint: eModelEndpointSchema.nullable(),
   endpointType: eModelEndpointSchema.nullable().optional(),
   isArchived: z.boolean().optional(),
@@ -801,6 +802,7 @@ export const tConvoUpdateSchema = tConversationSchema.merge(
 
 export const tQueryParamsSchema = tConversationSchema
   .pick({
+    mode: true,
     // librechat settings
     /** The model spec to be used */
     spec: true,

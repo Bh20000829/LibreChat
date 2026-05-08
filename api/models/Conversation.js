@@ -157,9 +157,15 @@ module.exports = {
   },
   getConvosByCursor: async (
     user,
-    { cursor, limit = 25, isArchived = false, tags, search, order = 'desc' } = {},
+    { cursor, limit = 25, isArchived = false, tags, search, order = 'desc', mode } = {},
   ) => {
     const filters = [{ user }];
+    if (mode === 'image') {
+      filters.push({ mode: 'image' });
+    } else {
+      filters.push({ $or: [{ mode: 'chat' }, { mode: { $exists: false } }] });
+    }
+
     if (isArchived) {
       filters.push({ isArchived: true });
     } else {
@@ -197,7 +203,7 @@ module.exports = {
     try {
       const convos = await Conversation.find(query)
         .select(
-          'conversationId endpoint title createdAt updatedAt user model agent_id assistant_id spec iconURL',
+          'conversationId mode endpoint title createdAt updatedAt user model agent_id assistant_id spec iconURL',
         )
         .sort({ updatedAt: order === 'asc' ? 1 : -1 })
         .limit(limit + 1)

@@ -228,6 +228,29 @@ describe('getOpenAIModels', () => {
     expect(models).toEqual(expect.arrayContaining(['openai-model', 'openai-model-2']));
   });
 
+  it('returns `OPENAI_IMAGE_MODELS` when image mode is requested', async () => {
+    process.env.OPENAI_MODELS = 'openai-chat-model';
+    process.env.OPENAI_IMAGE_MODELS = 'openai-image-model,openai-image-model-2';
+    const models = await getOpenAIModels({ mode: 'image' });
+    expect(models).toEqual(expect.arrayContaining(['openai-image-model', 'openai-image-model-2']));
+    expect(models).not.toContain('openai-chat-model');
+  });
+
+  it('does not fall back to `OPENAI_MODELS` when `OPENAI_IMAGE_MODELS` is explicitly empty', async () => {
+    process.env.OPENAI_MODELS = 'openai-chat-model';
+    process.env.OPENAI_IMAGE_MODELS = '';
+    const models = await getOpenAIModels({ mode: 'image' });
+    expect(models).toEqual([]);
+  });
+
+  it('returns `OPENAI_CHAT_MODELS` before falling back to `OPENAI_MODELS`', async () => {
+    process.env.OPENAI_MODELS = 'openai-shared-model';
+    process.env.OPENAI_CHAT_MODELS = 'openai-chat-model,openai-chat-model-2';
+    const models = await getOpenAIModels({ mode: 'chat' });
+    expect(models).toEqual(expect.arrayContaining(['openai-chat-model', 'openai-chat-model-2']));
+    expect(models).not.toContain('openai-shared-model');
+  });
+
   it('utilizes proxy configuration when PROXY is set', async () => {
     axios.get.mockResolvedValue({
       data: {

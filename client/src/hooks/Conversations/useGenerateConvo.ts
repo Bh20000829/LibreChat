@@ -12,6 +12,7 @@ import type {
 import type { AssistantListItem } from '~/common';
 import type { SetterOrUpdater } from 'recoil';
 import useAssistantListMap from '~/hooks/Assistants/useAssistantListMap';
+import useConversationMode from './useConversationMode';
 import { buildDefaultConvo, getDefaultEndpoint, logger } from '~/utils';
 import { useGetEndpointsQuery } from '~/data-provider';
 import { mainTextareaId } from '~/common';
@@ -26,7 +27,8 @@ const useGenerateConvo = ({
   rootIndex: number;
   setConversation?: SetterOrUpdater<TConversation | null>;
 }) => {
-  const modelsQuery = useGetModelsQuery();
+  const { mode } = useConversationMode(index);
+  const modelsQuery = useGetModelsQuery(undefined, { mode });
   const assistantsListMap = useAssistantListMap();
   const { data: endpointsConfig = {} as TEndpointsConfig } = useGetEndpointsQuery();
 
@@ -63,6 +65,7 @@ const useGenerateConvo = ({
       let conversation = {
         conversationId: 'new',
         title: 'New Chat',
+        mode,
         endpoint: null,
         ...template,
         createdAt: '',

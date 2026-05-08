@@ -29,6 +29,7 @@ router.use(requireJwtAuth);
 router.get('/', async (req, res) => {
   const limit = parseInt(req.query.limit, 10) || 25;
   const cursor = req.query.cursor;
+  const mode = req.query.mode === 'image' ? 'image' : 'chat';
   const isArchived = isEnabled(req.query.isArchived);
   const search = req.query.search ? decodeURIComponent(req.query.search) : undefined;
   const order = req.query.order || 'desc';
@@ -42,6 +43,7 @@ router.get('/', async (req, res) => {
     const result = await getConvosByCursor(req.user.id, {
       cursor,
       limit,
+      mode,
       isArchived,
       tags,
       search,

@@ -5,6 +5,7 @@ import { useSetRecoilState } from 'recoil';
 import {
   request,
   Constants,
+  EModelEndpoint,
   /* @ts-ignore */
   createPayload,
   LocalStorageKeys,
@@ -37,6 +38,52 @@ type ChatHelpers = Pick<
   | 'newConversation'
   | 'resetLatestMessage'
 >;
+
+const logOpenAIImageRequest = ({
+  server,
+  payload,
+  submission,
+}: {
+  server: string;
+  payload: TPayload;
+  submission: TSubmission;
+}) => {
+  const endpoint = submission.endpointOption?.endpoint;
+  const mode = submission.conversation?.mode;
+
+  if (endpoint !== EModelEndpoint.openAI || mode !== 'image') {
+    return;
+  }
+
+  const providerPayload = {
+    prompt: submission.userMessage?.text?.trim() ?? '',
+    model:
+      (submission.endpointOption?.model_parameters?.model as string | undefined) ??
+      submission.conversation?.model ??
+      '',
+    ...(submission.endpointOption?.model_parameters ?? {}),
+  };
+
+  console.groupCollapsed('[OpenAI Image Request] Browser -> LibreChat');
+  console.log({
+    method: 'POST',
+    url: server,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer <redacted>',
+    },
+    body: payload,
+  });
+  console.groupEnd();
+
+  console.groupCollapsed('[OpenAI Image Request] LibreChat -> OpenAI preview');
+  console.log({
+    method: 'POST',
+    url: '/v1/images/generations',
+    body: providerPayload,
+  });
+  console.groupEnd();
+};
 
 export default function useSSE(
   submission: TSubmission | null,
@@ -100,6 +147,11 @@ export default function useSSE(
     const payloadData = createPayload(submission);
     let { payload } = payloadData;
     payload = removeNullishValues(payload) as TPayload;
+    logOpenAIImageRequest({
+      server: payloadData.server,
+      payload,
+      submission,
+    });
 
     let textIndex = null;
     clearStepMaps();

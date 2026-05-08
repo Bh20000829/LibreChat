@@ -3,13 +3,18 @@ import {
   EModelEndpoint,
   defaultEndpoints,
   modularEndpoints,
-  LocalStorageKeys,
   getEndpointField,
   isAgentsEndpoint,
   isAssistantsEndpoint,
 } from 'librechat-data-provider';
 import type * as t from 'librechat-data-provider';
 import type { LocalizeFunction, IconsRecord } from '~/common';
+import {
+  getModeLastConvoSetupKey,
+  getModeLastModelKey,
+  getModeLastSpecKey,
+  normalizeConversationMode,
+} from './conversationMode';
 
 export const getEntityName = ({
   name = '',
@@ -66,21 +71,23 @@ export function mapEndpoints(endpointsConfig: t.TEndpointsConfig) {
   );
 }
 
-const firstLocalConvoKey = LocalStorageKeys.LAST_CONVO_SETUP + '_0';
-
 /**
  * Ensures the last selected model stays up to date, as conversation may
  * update without updating last convo setup when same endpoint */
 export function updateLastSelectedModel({
   endpoint,
   model = '',
+  mode = 'chat',
 }: {
   endpoint: string;
   model?: string;
+  mode?: 'chat' | 'image';
 }) {
   if (!model) {
     return;
   }
+  const normalizedMode = normalizeConversationMode(mode);
+  const firstLocalConvoKey = getModeLastConvoSetupKey(0, normalizedMode);
   /* Note: an empty string value is possible */
   const lastConversationSetup = JSON.parse(
     (localStorage.getItem(firstLocalConvoKey) ?? '{}') || '{}',
@@ -92,10 +99,10 @@ export function updateLastSelectedModel({
   }
 
   const lastSelectedModels = JSON.parse(
-    (localStorage.getItem(LocalStorageKeys.LAST_MODEL) ?? '{}') || '{}',
+    (localStorage.getItem(getModeLastModelKey(normalizedMode)) ?? '{}') || '{}',
   );
   lastSelectedModels[endpoint] = model;
-  localStorage.setItem(LocalStorageKeys.LAST_MODEL, JSON.stringify(lastSelectedModels));
+  localStorage.setItem(getModeLastModelKey(normalizedMode), JSON.stringify(lastSelectedModels));
 }
 
 interface ConversationInitParams {
@@ -198,12 +205,16 @@ export function applyModelSpecEphemeralAgent({
  * Priority: admin default → last selected → first spec (when prioritize=true or modelSelect disabled).
  * Otherwise: admin default or last conversation spec.
  */
-export function getDefaultModelSpec(startupConfig?: t.TStartupConfig):
+export function getDefaultModelSpec(
+  startupConfig?: t.TStartupConfig,
+  mode: 'chat' | 'image' = 'chat',
+):
   | {
       default?: t.TModelSpec;
       last?: t.TModelSpec;
     }
   | undefined {
+  const normalizedMode = normalizeConversationMode(mode);
   const { modelSpecs, interface: interfaceConfig } = startupConfig ?? {};
   const { list, prioritize } = modelSpecs ?? {};
   if (!list) {
@@ -211,14 +222,14 @@ export function getDefaultModelSpec(startupConfig?: t.TStartupConfig):
   }
   const defaultSpec = list?.find((spec) => spec.default);
   if (prioritize === true || !interfaceConfig?.modelSelect) {
-    const lastSelectedSpecName = localStorage.getItem(LocalStorageKeys.LAST_SPEC);
+    const lastSelectedSpecName = localStorage.getItem(getModeLastSpecKey(normalizedMode));
     const lastSelectedSpec = list?.find((spec) => spec.name === lastSelectedSpecName);
     return { default: defaultSpec || lastSelectedSpec || list?.[0] };
   } else if (defaultSpec) {
     return { default: defaultSpec };
   }
   const lastConversationSetup = JSON.parse(
-    localStorage.getItem(LocalStorageKeys.LAST_CONVO_SETUP + '_0') ?? '{}',
+    localStorage.getItem(getModeLastConvoSetupKey(0, normalizedMode)) ?? '{}',
   );
   if (!lastConversationSetup.spec) {
     return;

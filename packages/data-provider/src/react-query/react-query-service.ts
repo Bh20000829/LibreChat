@@ -182,15 +182,20 @@ export const useRevokeAllUserKeysMutation = (): UseMutationResult<unknown> => {
 
 export const useGetModelsQuery = (
   config?: UseQueryOptions<t.TModelsConfig>,
+  params?: { mode?: 'chat' | 'image' },
 ): QueryObserverResult<t.TModelsConfig> => {
-  return useQuery<t.TModelsConfig>([QueryKeys.models], () => dataService.getModels(), {
-    initialData: initialModelsConfig,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchOnMount: false,
-    staleTime: Infinity,
-    ...config,
-  });
+  return useQuery<t.TModelsConfig>(
+    [QueryKeys.models, params ?? {}],
+    () => dataService.getModels(params),
+    {
+      initialData: params?.mode == null ? initialModelsConfig : undefined,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: false,
+      staleTime: Infinity,
+      ...config,
+    },
+  );
 };
 
 export const useCreatePresetMutation = (): UseMutationResult<

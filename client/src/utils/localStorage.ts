@@ -1,10 +1,18 @@
 import { LocalStorageKeys, TConversation, isUUID } from 'librechat-data-provider';
+import {
+  getModeLastConvoSetupKey,
+  getModeLastModelKey,
+  getModeLastToolsKey,
+  normalizeConversationMode,
+} from './conversationMode';
 
-export function getLocalStorageItems() {
+export function getLocalStorageItems(mode: 'chat' | 'image' = 'chat', index = 0) {
+  const normalizedMode = normalizeConversationMode(mode);
   const items = {
-    lastSelectedModel: localStorage.getItem(LocalStorageKeys.LAST_MODEL) ?? '',
-    lastSelectedTools: localStorage.getItem(LocalStorageKeys.LAST_TOOLS) ?? '',
-    lastConversationSetup: localStorage.getItem(LocalStorageKeys.LAST_CONVO_SETUP + '_0') ?? '',
+    lastSelectedModel: localStorage.getItem(getModeLastModelKey(normalizedMode)) ?? '',
+    lastSelectedTools: localStorage.getItem(getModeLastToolsKey(normalizedMode)) ?? '',
+    lastConversationSetup:
+      localStorage.getItem(getModeLastConvoSetupKey(index, normalizedMode)) ?? '',
   };
 
   const lastSelectedModel = items.lastSelectedModel
@@ -36,9 +44,9 @@ export function clearLocalStorage(skipFirst?: boolean) {
       key.startsWith(LocalStorageKeys.ASST_ID_PREFIX) ||
       key.startsWith(LocalStorageKeys.AGENT_ID_PREFIX) ||
       key.startsWith(LocalStorageKeys.LAST_CONVO_SETUP) ||
-      key === LocalStorageKeys.LAST_SPEC ||
-      key === LocalStorageKeys.LAST_TOOLS ||
-      key === LocalStorageKeys.LAST_MODEL ||
+      key.startsWith(LocalStorageKeys.LAST_SPEC) ||
+      key.startsWith(LocalStorageKeys.LAST_TOOLS) ||
+      key.startsWith(LocalStorageKeys.LAST_MODEL) ||
       key === LocalStorageKeys.FILES_TO_DELETE
     ) {
       localStorage.removeItem(key);

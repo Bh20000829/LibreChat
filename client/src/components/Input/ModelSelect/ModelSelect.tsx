@@ -2,6 +2,7 @@ import { useGetModelsQuery } from 'librechat-data-provider/react-query';
 import type { TConversation } from 'librechat-data-provider';
 import type { TSetOption } from '~/common';
 import { multiChatOptions } from './options';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 
 type TGoogleProps = {
   showExamples: boolean;
@@ -22,7 +23,8 @@ export default function ModelSelect({
   popover = false,
   showAbove = true,
 }: TSelectProps) {
-  const modelsQuery = useGetModelsQuery();
+  const { mode } = useConversationMode();
+  const modelsQuery = useGetModelsQuery(undefined, { mode });
 
   if (!conversation?.endpoint) {
     return null;

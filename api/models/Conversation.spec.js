@@ -353,6 +353,34 @@ describe('Conversation Operations', () => {
       expect(result.conversations[0].conversationId).toBe(nonExpiredConvo.conversationId);
     });
 
+    it('should filter conversations by image mode in getConvosByCursor', async () => {
+      const imageConvo = await Conversation.create({
+        conversationId: uuidv4(),
+        user: 'user123',
+        title: 'Image convo',
+        mode: 'image',
+        endpoint: EModelEndpoint.openAI,
+        expiredAt: null,
+        updatedAt: new Date(),
+      });
+
+      await Conversation.create({
+        conversationId: uuidv4(),
+        user: 'user123',
+        title: 'Chat convo',
+        mode: 'chat',
+        endpoint: EModelEndpoint.openAI,
+        expiredAt: null,
+        updatedAt: new Date(),
+      });
+
+      const result = await getConvosByCursor('user123', { mode: 'image' });
+
+      expect(result.conversations).toHaveLength(1);
+      expect(result.conversations[0].conversationId).toBe(imageConvo.conversationId);
+      expect(result.conversations[0].mode).toBe('image');
+    });
+
     it('should filter out expired conversations in getConvosQueried', async () => {
       // Create test conversations
       const nonExpiredConvo = await Conversation.create({

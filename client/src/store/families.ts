@@ -16,6 +16,12 @@ import type { TOptionSettings, ExtendedFile } from '~/common';
 import { useSetConvoContext } from '~/Providers/SetConvoContext';
 import { storeEndpointSettings, logger, createChatSearchParams } from '~/utils';
 import { createSearchParams } from 'react-router-dom';
+import {
+  getModeLastConvoSetupKey,
+  getModeLastSpecKey,
+  getModeLastToolsKey,
+  normalizeConversationMode,
+} from '~/utils/conversationMode';
 
 const latestMessageKeysAtom = atom<(string | number)[]>({
   key: 'latestMessageKeys',
@@ -87,11 +93,14 @@ const conversationByIndex = atomFamily<TConversation | null, string | number>({
           localStorage.setItem(`${LocalStorageKeys.AGENT_ID_PREFIX}${index}`, newValue.agent_id);
         }
         if (newValue?.spec != null && newValue.spec) {
-          localStorage.setItem(LocalStorageKeys.LAST_SPEC, newValue.spec);
+          localStorage.setItem(
+            getModeLastSpecKey(normalizeConversationMode(newValue.mode)),
+            newValue.spec,
+          );
         }
         if (newValue?.tools && Array.isArray(newValue.tools)) {
           localStorage.setItem(
-            LocalStorageKeys.LAST_TOOLS,
+            getModeLastToolsKey(normalizeConversationMode(newValue.mode)),
             JSON.stringify(newValue.tools.filter((el) => !!el)),
           );
         }
@@ -102,7 +111,7 @@ const conversationByIndex = atomFamily<TConversation | null, string | number>({
 
         storeEndpointSettings(newValue);
         localStorage.setItem(
-          `${LocalStorageKeys.LAST_CONVO_SETUP}_${index}`,
+          getModeLastConvoSetupKey(Number(index), normalizeConversationMode(newValue.mode)),
           JSON.stringify(newValue),
         );
 

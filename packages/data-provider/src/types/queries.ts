@@ -14,6 +14,7 @@ export type Conversation = {
 
 export type ConversationListParams = {
   cursor?: string;
+  mode?: 'chat' | 'image';
   isArchived?: boolean;
   sortBy?: 'title' | 'createdAt' | 'updatedAt';
   sortDirection?: 'asc' | 'desc';

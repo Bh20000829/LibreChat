@@ -2,6 +2,13 @@ import { Schema } from 'mongoose';
 
 // @ts-ignore
 export const conversationPreset = {
+  /** 会话模式 */
+  mode: {
+    type: String,
+    enum: ['chat', 'image'],
+    default: 'chat',
+    index: true,
+  },
   // endpoint: [azureOpenAI, openAI, anthropic, chatGPTBrowser]
   /** 接入端点 */
   endpoint: {

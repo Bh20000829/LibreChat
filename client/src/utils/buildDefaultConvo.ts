@@ -6,6 +6,7 @@ import {
 } from 'librechat-data-provider';
 import type { TConversation, EndpointSchemaKey } from 'librechat-data-provider';
 import { getLocalStorageItems } from './localStorage';
+import { normalizeConversationMode } from './conversationMode';
 
 const buildDefaultConvo = ({
   models,
@@ -18,7 +19,8 @@ const buildDefaultConvo = ({
   endpoint?: EModelEndpoint | null;
   lastConversationSetup: TConversation | null;
 }): TConversation => {
-  const { lastSelectedModel, lastSelectedTools } = getLocalStorageItems();
+  const mode = normalizeConversationMode(conversation.mode ?? lastConversationSetup?.mode);
+  const { lastSelectedModel, lastSelectedTools } = getLocalStorageItems(mode);
   const endpointType = lastConversationSetup?.endpointType ?? conversation.endpointType;
 
   if (!endpoint) {
@@ -63,6 +65,7 @@ const buildDefaultConvo = ({
   const defaultConvo = {
     ...conversation,
     ...convo,
+    mode,
     endpointType,
     endpoint,
   };

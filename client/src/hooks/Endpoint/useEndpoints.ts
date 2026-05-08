@@ -19,6 +19,7 @@ import { useGetEndpointsQuery } from '~/data-provider';
 import { mapEndpoints, getIconKey } from '~/utils';
 import { useHasAccess } from '~/hooks';
 import { icons } from './Icons';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 
 export const useEndpoints = ({
   agents,
@@ -31,7 +32,8 @@ export const useEndpoints = ({
   endpointsConfig: TEndpointsConfig;
   startupConfig: TStartupConfig | undefined;
 }) => {
-  const modelsQuery = useGetModelsQuery();
+  const { mode } = useConversationMode();
+  const modelsQuery = useGetModelsQuery(undefined, { mode });
   const { data: endpoints = [] } = useGetEndpointsQuery({ select: mapEndpoints });
   const interfaceConfig = startupConfig?.interface ?? {};
   const includedEndpoints = useMemo(

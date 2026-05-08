@@ -56,5 +56,6 @@ const convoSchema: Schema<IConversation> = new Schema(
 convoSchema.index({ expiredAt: 1 }, { expireAfterSeconds: 0 });
 convoSchema.index({ createdAt: 1, updatedAt: 1 });
 convoSchema.index({ conversationId: 1, user: 1 }, { unique: true });
+convoSchema.index({ user: 1, mode: 1, isArchived: 1, updatedAt: -1 });
 
 export default convoSchema;

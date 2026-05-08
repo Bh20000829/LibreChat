@@ -14,6 +14,7 @@ import {
 } from '~/data-provider';
 import { cleanupPreset, removeUnavailableTools, getConvoSwitchLogic } from '~/utils';
 import useDefaultConvo from '~/hooks/Conversations/useDefaultConvo';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { NotificationSeverity } from '~/common';
 import useNewConvo from '~/hooks/useNewConvo';
@@ -22,6 +23,7 @@ import { useLocalize } from '~/hooks';
 import store from '~/store';
 
 export default function usePresets() {
+  const { mode } = useConversationMode();
   const localize = useLocalize();
   const hasLoaded = useRef(false);
   const queryClient = useQueryClient();
@@ -34,7 +36,7 @@ export default function usePresets() {
   const [_defaultPreset, setDefaultPreset] = useRecoilState(store.defaultPreset);
   const presetsQuery = useGetPresetsQuery({ enabled: !!user && isAuthenticated });
   const { preset, conversation, index, setPreset } = useChatContext();
-  const { data: modelsData } = useGetModelsQuery();
+  const { data: modelsData } = useGetModelsQuery(undefined, { mode });
   const { newConversation } = useNewConvo(index);
 
   useEffect(() => {

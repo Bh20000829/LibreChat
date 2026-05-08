@@ -19,6 +19,7 @@ import {
   useGetStartupConfig,
 } from '~/data-provider';
 import useAssistantListMap from '~/hooks/Assistants/useAssistantListMap';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 import { useAgentsMapContext } from '~/Providers/AgentsMapContext';
 import { mapEndpoints, getPresetTitle } from '~/utils';
 import { EndpointIcon } from '~/components/Endpoints';
@@ -58,6 +59,7 @@ export default function useMentions({
   assistantMap: TAssistantsMap;
   includeAssistants: boolean;
 }) {
+  const { mode } = useConversationMode();
   const hasAgentAccess = useHasAccess({
     permissionType: PermissionTypes.AGENTS,
     permission: Permissions.USE,
@@ -65,7 +67,7 @@ export default function useMentions({
 
   const agentsMap = useAgentsMapContext();
   const { data: presets } = useGetPresetsQuery();
-  const { data: modelsConfig } = useGetModelsQuery();
+  const { data: modelsConfig } = useGetModelsQuery(undefined, { mode });
   const { data: startupConfig } = useGetStartupConfig();
   const { data: endpointsConfig } = useGetEndpointsQuery();
   const { data: endpoints = [] } = useGetEndpointsQuery({

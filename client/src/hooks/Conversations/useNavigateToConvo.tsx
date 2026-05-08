@@ -12,6 +12,7 @@ import type {
 import { getDefaultEndpoint, clearMessagesCache, buildDefaultConvo, logger } from '~/utils';
 import { useApplyModelSpecEffects } from '~/hooks/Agents';
 import store from '~/store';
+import { normalizeConversationMode, withModeSearchParams } from '~/utils/conversationMode';
 
 const useNavigateToConvo = (index = 0) => {
   const navigate = useNavigate();
@@ -50,12 +51,16 @@ const useNavigateToConvo = (index = 0) => {
       );
       logger.log('conversation', 'Fetched fresh conversation data', data);
       setConversation(data);
-      navigate(`/c/${conversationId ?? Constants.NEW_CONVO}`, { state: { focusChat: true } });
+      const params = withModeSearchParams('', data.mode);
+      navigate(`/c/${conversationId ?? Constants.NEW_CONVO}?${params.toString()}`, {
+        state: { focusChat: true },
+      });
     } catch (error) {
       console.error('Error fetching conversation data on navigation', error);
       if (conversation) {
         setConversation(conversation as TConversation);
-        navigate(`/c/${conversationId}`, { state: { focusChat: true } });
+        const params = withModeSearchParams('', conversation.mode);
+        navigate(`/c/${conversationId}?${params.toString()}`, { state: { focusChat: true } });
       }
     }
   };
@@ -84,7 +89,10 @@ const useNavigateToConvo = (index = 0) => {
     const endpointsConfig = queryClient.getQueryData<TEndpointsConfig>([QueryKeys.endpoints]);
     if (!convo.endpoint || !endpointsConfig?.[convo.endpoint]) {
       /* undefined/removed endpoint edge case */
-      const modelsConfig = queryClient.getQueryData<TModelsConfig>([QueryKeys.models]);
+      const modelsConfig = queryClient.getQueryData<TModelsConfig>([
+        QueryKeys.models,
+        { mode: normalizeConversationMode(conversation.mode) },
+      ]);
       const defaultEndpoint = getDefaultEndpoint({
         convoSetup: conversation,
         endpointsConfig,
@@ -111,7 +119,10 @@ const useNavigateToConvo = (index = 0) => {
       fetchFreshData(convo);
     } else {
       setConversation(convo);
-      navigate(`/c/${convo.conversationId ?? Constants.NEW_CONVO}`, { state: { focusChat: true } });
+      const params = withModeSearchParams('', normalizeConversationMode(convo.mode));
+      navigate(`/c/${convo.conversationId ?? Constants.NEW_CONVO}?${params.toString()}`, {
+        state: { focusChat: true },
+      });
     }
   };
 

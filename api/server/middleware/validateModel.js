@@ -12,6 +12,10 @@ const { logViolation } = require('~/cache');
  */
 const validateModel = async (req, res, next) => {
   const { model, endpoint } = req.body;
+  req.query = {
+    ...req.query,
+    mode: req.body?.mode === 'image' ? 'image' : req.query?.mode,
+  };
   if (!model) {
     return handleError(res, { text: 'Model not provided' });
   }

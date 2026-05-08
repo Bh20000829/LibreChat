@@ -15,33 +15,34 @@ const {
  */
 async function loadDefaultModels(req) {
   try {
+    const mode = req.query?.mode === 'image' ? 'image' : 'chat';
     const [openAI, anthropic, azureOpenAI, assistants, azureAssistants, google, bedrock] =
       await Promise.all([
-        getOpenAIModels({ user: req.user.id }).catch((error) => {
+        getOpenAIModels({ user: req.user.id, mode }).catch((error) => {
           logger.error('Error fetching OpenAI models:', error);
           return [];
         }),
-        getAnthropicModels({ user: req.user.id }).catch((error) => {
+        getAnthropicModels({ user: req.user.id, mode }).catch((error) => {
           logger.error('Error fetching Anthropic models:', error);
           return [];
         }),
-        getOpenAIModels({ user: req.user.id, azure: true }).catch((error) => {
+        getOpenAIModels({ user: req.user.id, azure: true, mode }).catch((error) => {
           logger.error('Error fetching Azure OpenAI models:', error);
           return [];
         }),
-        getOpenAIModels({ assistants: true }).catch((error) => {
+        getOpenAIModels({ assistants: true, mode }).catch((error) => {
           logger.error('Error fetching OpenAI Assistants API models:', error);
           return [];
         }),
-        getOpenAIModels({ azureAssistants: true }).catch((error) => {
+        getOpenAIModels({ azureAssistants: true, mode }).catch((error) => {
           logger.error('Error fetching Azure OpenAI Assistants API models:', error);
           return [];
         }),
-        Promise.resolve(getGoogleModels()).catch((error) => {
+        Promise.resolve(getGoogleModels({ mode })).catch((error) => {
           logger.error('Error getting Google models:', error);
           return [];
         }),
-        Promise.resolve(getBedrockModels()).catch((error) => {
+        Promise.resolve(getBedrockModels({ mode })).catch((error) => {
           logger.error('Error getting Bedrock models:', error);
           return [];
         }),

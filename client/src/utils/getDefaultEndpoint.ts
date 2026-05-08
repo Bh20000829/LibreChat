@@ -6,6 +6,7 @@ import type {
 } from 'librechat-data-provider';
 import { getLocalStorageItems } from './localStorage';
 import { mapEndpoints } from './endpoints';
+import { normalizeConversationMode } from './conversationMode';
 
 type TConvoSetup = Partial<TPreset> | Partial<TConversation>;
 
@@ -46,6 +47,20 @@ const getEndpointFromLocalStorage = (endpointsConfig: TEndpointsConfig) => {
   }
 };
 
+const getEndpointFromModeLocalStorage = (
+  endpointsConfig: TEndpointsConfig,
+  mode?: string | null,
+) => {
+  try {
+    const { lastConversationSetup } = getLocalStorageItems(normalizeConversationMode(mode));
+    const { endpoint } = lastConversationSetup ?? { endpoint: null };
+    return endpoint && endpointsConfig?.[endpoint] != null ? endpoint : null;
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
 const getDefinedEndpoint = (endpointsConfig: TEndpointsConfig) => {
   const endpoints = mapEndpoints(endpointsConfig);
   return endpoints.find((e) => Object.hasOwn(endpointsConfig ?? {}, e));
@@ -57,6 +72,7 @@ const getDefaultEndpoint = ({
 }: TDefaultEndpoint): EModelEndpoint | undefined => {
   return (
     getEndpointFromSetup(convoSetup, endpointsConfig) ||
+    getEndpointFromModeLocalStorage(endpointsConfig, convoSetup?.mode) ||
     getEndpointFromLocalStorage(endpointsConfig) ||
     getDefinedEndpoint(endpointsConfig)
   );

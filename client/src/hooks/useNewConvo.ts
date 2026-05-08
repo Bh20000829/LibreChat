@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useGetModelsQuery } from 'librechat-data-provider/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilState, useRecoilValue, useSetRecoilState, useRecoilCallback } from 'recoil';
 import {
   Constants,
@@ -10,6 +11,7 @@ import {
   getEndpointField,
   LocalStorageKeys,
   isAssistantsEndpoint,
+  QueryKeys,
 } from 'librechat-data-provider';
 import type {
   TPreset,
@@ -27,6 +29,7 @@ import {
   buildDefaultConvo,
   logger,
 } from '~/utils';
+import { normalizeConversationMode, withModeSearchParams } from '~/utils/conversationMode';
 import { useDeleteFilesMutation, useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
 import useAssistantListMap from './Assistants/useAssistantListMap';
 import { useResetChatBadges } from './useChatBadges';
@@ -36,7 +39,9 @@ import store from '~/store';
 
 const useNewConvo = (index = 0) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
+  const currentMode = normalizeConversationMode(searchParams.get('mode'));
   const { data: startupConfig } = useGetStartupConfig();
   const applyModelSpecEffects = useApplyModelSpecEffects();
   const clearAllConversations = store.useClearConvoState();
@@ -48,7 +53,7 @@ const useNewConvo = (index = 0) => {
   const setSubmission = useSetRecoilState<TSubmission | null>(store.submissionByIndex(index));
   const { data: endpointsConfig = {} as TEndpointsConfig } = useGetEndpointsQuery();
 
-  const modelsQuery = useGetModelsQuery();
+  const modelsQuery = useGetModelsQuery(undefined, { mode: currentMode });
   const assistantsListMap = useAssistantListMap();
   const { pauseGlobalAudio } = usePauseGlobalAudio(index);
   const saveDrafts = useRecoilValue<boolean>(store.saveDrafts);
@@ -75,7 +80,12 @@ const useNewConvo = (index = 0) => {
         disableFocus?: boolean,
         _disableParams?: boolean,
       ) => {
-        const modelsConfig = modelsData ?? modelsQuery.data;
+        const mode = normalizeConversationMode(conversation.mode ?? preset?.mode ?? currentMode);
+        const scopedModelsConfig = queryClient.getQueryData<TModelsConfig>([
+          QueryKeys.models,
+          { mode },
+        ]);
+        const modelsConfig = modelsData ?? scopedModelsConfig ?? modelsQuery.data;
         const { endpoint = null } = conversation;
         const buildDefaultConversation = (endpoint === null || buildDefault) ?? false;
         const activePreset =
@@ -141,6 +151,7 @@ const useNewConvo = (index = 0) => {
             updateLastSelectedModel({
               endpoint: defaultEndpoint,
               model: conversation.model,
+              mode: conversation.mode,
             });
           }
 
@@ -189,19 +200,23 @@ const useNewConvo = (index = 0) => {
         }
 
         const searchParamsString = searchParams?.toString();
-        const getParams = () => (searchParamsString ? `?${searchParamsString}` : '');
+        const getParams = (mode?: string | null) => {
+          const params = withModeSearchParams(searchParamsString, mode ?? currentMode);
+          const paramString = params.toString();
+          return paramString ? `?${paramString}` : '';
+        };
 
         if (conversation.conversationId === Constants.NEW_CONVO && !modelsData) {
           const appTitle = localStorage.getItem(LocalStorageKeys.APP_TITLE) ?? '';
           if (appTitle) {
             document.title = appTitle;
           }
-          const path = `/c/${Constants.NEW_CONVO}${getParams()}`;
+          const path = `/c/${Constants.NEW_CONVO}${getParams(conversation.mode)}`;
           navigate(path, { state: { focusChat: true } });
           return;
         }
 
-        const path = `/c/${conversation.conversationId}${getParams()}`;
+        const path = `/c/${conversation.conversationId}${getParams(conversation.mode)}`;
         navigate(path, {
           replace: true,
           state: disableFocus ? {} : { focusChat: true },
@@ -247,6 +262,7 @@ const useNewConvo = (index = 0) => {
       const conversation = {
         conversationId: Constants.NEW_CONVO as string,
         title: 'New Chat',
+        mode: normalizeConversationMode(_template.mode ?? _preset?.mode ?? currentMode),
         endpoint: null,
         ...template,
         createdAt: '',
@@ -254,7 +270,7 @@ const useNewConvo = (index = 0) => {
       };
 
       let preset = _preset;
-      const result = getDefaultModelSpec(startupConfig);
+      const result = getDefaultModelSpec(startupConfig, conversation.mode);
       const defaultModelSpec = result?.default ?? result?.last;
       if (
         !preset &&

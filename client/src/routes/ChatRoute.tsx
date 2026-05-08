@@ -13,10 +13,12 @@ import useAuthRedirect from './useAuthRedirect';
 import temporaryStore from '~/store/temporary';
 import { useRecoilCallback } from 'recoil';
 import store from '~/store';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 
 export default function ChatRoute() {
   const { data: startupConfig } = useGetStartupConfig();
   const { isAuthenticated, user } = useAuthRedirect();
+  const { mode } = useConversationMode();
 
   const setIsTemporary = useRecoilCallback(
     ({ set }) =>
@@ -33,10 +35,13 @@ export default function ChatRoute() {
   const { hasSetConversation, conversation } = store.useCreateConversationAtom(index);
   const { newConversation } = useNewConvo();
 
-  const modelsQuery = useGetModelsQuery({
-    enabled: isAuthenticated,
-    refetchOnMount: 'always',
-  });
+  const modelsQuery = useGetModelsQuery(
+    {
+      enabled: isAuthenticated,
+      refetchOnMount: 'always',
+    },
+    { mode },
+  );
   const initialConvoQuery = useGetConvoIdQuery(conversationId, {
     enabled:
       isAuthenticated && conversationId !== Constants.NEW_CONVO && !hasSetConversation.current,
@@ -66,7 +71,7 @@ export default function ChatRoute() {
     }
 
     if (conversationId === Constants.NEW_CONVO && endpointsQuery.data && modelsQuery.data) {
-      const result = getDefaultModelSpec(startupConfig);
+      const result = getDefaultModelSpec(startupConfig, mode);
       const spec = result?.default ?? result?.last;
       logger.log('conversation', 'ChatRoute, new convo effect', conversation);
       newConversation({
@@ -91,7 +96,7 @@ export default function ChatRoute() {
       assistantListMap[EModelEndpoint.assistants] &&
       assistantListMap[EModelEndpoint.azureAssistants]
     ) {
-      const result = getDefaultModelSpec(startupConfig);
+      const result = getDefaultModelSpec(startupConfig, mode);
       const spec = result?.default ?? result?.last;
       logger.log('conversation', 'ChatRoute new convo, assistants effect', conversation);
       newConversation({

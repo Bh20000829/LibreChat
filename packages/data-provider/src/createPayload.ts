@@ -32,6 +32,7 @@ export default function createPayload(submission: t.TSubmission) {
     ...userMessage,
     ...endpointOption,
     endpoint,
+    mode: conversation?.mode,
     isTemporary,
     isRegenerate,
     editedContent,

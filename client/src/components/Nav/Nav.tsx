@@ -13,8 +13,10 @@ import {
 } from '~/hooks';
 import { useConversationsInfiniteQuery } from '~/data-provider';
 import { Conversations } from '~/components/Conversations';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 import SearchBar from './SearchBar';
 import NewChat from './NewChat';
+import ConversationModeToggle from './ConversationModeToggle';
 import { cn } from '~/utils';
 import store from '~/store';
 
@@ -61,6 +63,7 @@ const Nav = memo(
     const [newUser, setNewUser] = useLocalStorage('newUser', true);
     const [showLoading, setShowLoading] = useState(false);
     const [tags, setTags] = useState<string[]>([]);
+    const { mode } = useConversationMode();
 
     const hasAccessToBookmarks = useHasAccess({
       permissionType: PermissionTypes.BOOKMARKS,
@@ -72,6 +75,7 @@ const Nav = memo(
     const { data, fetchNextPage, isFetchingNextPage, isLoading, isFetching, refetch } =
       useConversationsInfiniteQuery(
         {
+          mode,
           tags: tags.length === 0 ? undefined : tags,
           search: search.debouncedQuery || undefined,
         },
@@ -151,7 +155,12 @@ const Nav = memo(
     }, [isFetchingNextPage, computedHasNextPage, fetchNextPage]);
 
     const subHeaders = useMemo(
-      () => search.enabled === true && <SearchBar isSmallScreen={isSmallScreen} />,
+      () => (
+        <>
+          <ConversationModeToggle />
+          {search.enabled === true && <SearchBar isSmallScreen={isSmallScreen} />}
+        </>
+      ),
       [search.enabled, isSmallScreen],
     );
 

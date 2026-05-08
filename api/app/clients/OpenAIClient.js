@@ -757,6 +757,111 @@ class OpenAIClient extends BaseClient {
     };
   }
 
+  async generateImage(params = {}, abortController = null) {
+    const startedAt = Date.now();
+    if (!abortController) {
+      abortController = new AbortController();
+    }
+
+    const {
+      prompt,
+      model,
+      n = 1,
+      size = '1024x1024',
+      quality = 'auto',
+      background = 'auto',
+      output_format = 'png',
+      output_compression,
+      moderation,
+      style,
+      response_format,
+      user,
+    } = params;
+
+    const baseURL = extractBaseURL(this.completionsUrl);
+    const opts = {
+      baseURL,
+      fetchOptions: {},
+    };
+
+    if (this.useOpenRouter) {
+      opts.defaultHeaders = {
+        'HTTP-Referer': 'https://librechat.ai',
+        'X-Title': 'LibreChat',
+      };
+    }
+
+    if (this.options.headers) {
+      opts.defaultHeaders = { ...opts.defaultHeaders, ...this.options.headers };
+    }
+
+    if (this.options.defaultQuery) {
+      opts.defaultQuery = this.options.defaultQuery;
+    }
+
+    if (this.options.proxy) {
+      opts.fetchOptions.agent = new HttpsProxyAgent(this.options.proxy);
+    }
+
+    if (process.env.OPENAI_ORGANIZATION) {
+      opts.organization = process.env.OPENAI_ORGANIZATION;
+    }
+
+    const openai = new OpenAI({
+      fetch: createFetch({
+        directEndpoint: this.options.directEndpoint,
+        reverseProxyUrl: this.options.reverseProxyUrl,
+      }),
+      apiKey: this.apiKey,
+      ...opts,
+    });
+
+    const imageRequest = {
+      model: model ?? this.modelOptions.model,
+      prompt,
+      n: Math.min(Math.max(Number(n) || 1, 1), 10),
+      size,
+      quality,
+      background,
+      output_format,
+      moderation,
+      style,
+      response_format,
+      user,
+      ...(output_format === 'webp' || output_format === 'jpeg'
+        ? { output_compression }
+        : {}),
+    };
+
+    logger.info('[OpenAIClient] generateImage request', {
+      url: `${baseURL}/images/generations`,
+      model: imageRequest.model,
+      prompt: imageRequest.prompt,
+      body: imageRequest,
+    });
+
+    const response = await openai.images.generate(imageRequest, {
+      signal: abortController.signal,
+    });
+
+    logger.info('[OpenAIClient] generateImage response', {
+      url: `${baseURL}/images/generations`,
+      durationMs: Date.now() - startedAt,
+      created: response?.created,
+      output_format: response?.output_format,
+      usage: response?.usage,
+      data: Array.isArray(response?.data)
+        ? response.data.map((item) => ({
+            has_b64_json: typeof item?.b64_json === 'string' && item.b64_json.length > 0,
+            revised_prompt: item?.revised_prompt,
+            url: item?.url,
+          }))
+        : response?.data,
+    });
+
+    return response;
+  }
+
   async chatCompletion({ payload, onProgress, abortController = null }) {
     const appConfig = this.options.req?.config;
     let error = null;

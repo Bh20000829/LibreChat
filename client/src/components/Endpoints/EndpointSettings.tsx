@@ -4,6 +4,7 @@ import { getEndpointField, SettingsViews } from 'librechat-data-provider';
 import type { TConversation } from 'librechat-data-provider';
 import type { TSettingsProps } from '~/common';
 import { useGetEndpointsQuery } from '~/data-provider';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 import { getSettings } from './Settings';
 import { cn } from '~/utils';
 import store from '~/store';
@@ -14,7 +15,8 @@ export default function Settings({
   isPreset = false,
   className = '',
 }: TSettingsProps) {
-  const modelsQuery = useGetModelsQuery();
+  const { mode } = useConversationMode();
+  const modelsQuery = useGetModelsQuery(undefined, { mode });
   const { data: endpointsConfig } = useGetEndpointsQuery();
   const currentSettingsView = useRecoilValue(store.currentSettingsView);
   const endpointType = getEndpointField(endpointsConfig, conversation?.endpoint ?? '', 'type');

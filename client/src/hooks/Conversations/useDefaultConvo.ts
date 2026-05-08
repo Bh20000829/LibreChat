@@ -8,6 +8,8 @@ import type {
 } from 'librechat-data-provider';
 import { getDefaultEndpoint, buildDefaultConvo } from '~/utils';
 import { useGetEndpointsQuery } from '~/data-provider';
+import useConversationMode from './useConversationMode';
+import { normalizeConversationMode } from '~/utils/conversationMode';
 
 type TDefaultConvo = {
   conversation: Partial<TConversation>;
@@ -19,8 +21,9 @@ type TDefaultConvo = {
 const exceptions = new Set(['spec', 'iconURL']);
 
 const useDefaultConvo = () => {
+  const { mode } = useConversationMode();
   const { data: endpointsConfig = {} as TEndpointsConfig } = useGetEndpointsQuery();
-  const { data: modelsConfig = {} as TModelsConfig } = useGetModelsQuery();
+  const { data: modelsConfig = {} as TModelsConfig } = useGetModelsQuery(undefined, { mode });
 
   const getDefaultConversation = ({
     conversation: _convo,
@@ -28,13 +31,14 @@ const useDefaultConvo = () => {
     cleanInput,
     cleanOutput,
   }: TDefaultConvo) => {
+    const convoMode = normalizeConversationMode(preset?.mode ?? _convo.mode ?? mode);
     const endpoint = getDefaultEndpoint({
-      convoSetup: preset as TPreset,
+      convoSetup: { ...(preset as TPreset), mode: convoMode },
       endpointsConfig,
     });
 
     const models = modelsConfig[endpoint ?? ''] || [];
-    const conversation = { ..._convo };
+    const conversation = { ..._convo, mode: convoMode };
     if (cleanInput === true) {
       for (const key in conversation) {
         if (excludedKeys.has(key) && !exceptions.has(key)) {
@@ -50,7 +54,7 @@ const useDefaultConvo = () => {
     const defaultConvo = buildDefaultConvo({
       conversation: conversation as TConversation,
       endpoint,
-      lastConversationSetup: preset as TConversation,
+      lastConversationSetup: { ...(preset as TConversation), mode: convoMode },
       models,
     });
 

@@ -26,6 +26,22 @@ const splitAndTrim = (input) => {
 
 const { openAIApiKey, userProvidedOpenAI } = require('./Config/EndpointService').config;
 
+const normalizeMode = (mode) => (mode === 'image' ? 'image' : 'chat');
+
+const getModeScopedEnvModels = ({ key, mode }) => {
+  const normalizedMode = normalizeMode(mode);
+  const scopedKey = key.replace(/_MODELS$/, `_${normalizedMode.toUpperCase()}_MODELS`);
+  if (Object.prototype.hasOwnProperty.call(process.env, scopedKey)) {
+    return splitAndTrim(process.env[scopedKey]);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(process.env, key)) {
+    return splitAndTrim(process.env[key]);
+  }
+
+  return null;
+};
+
 /**
  * Fetches OpenAI models from the specified base API path or Azure, based on the provided configuration.
  *
@@ -205,6 +221,7 @@ const fetchOpenAIModels = async (opts, _models = []) => {
  * @param {boolean} [opts.assistants=false] - Whether to fetch models for the Assistants endpoint.
  */
 const getOpenAIModels = async (opts) => {
+  const mode = normalizeMode(opts.mode);
   let models = defaultModels[EModelEndpoint.openAI];
 
   if (opts.assistants) {
@@ -235,9 +252,9 @@ const getOpenAIModels = async (opts) => {
     key = 'OPENAI_MODELS';
   }
 
-  if (process.env[key]) {
-    models = splitAndTrim(process.env[key]);
-    return models;
+  const envModels = getModeScopedEnvModels({ key, mode });
+  if (envModels) {
+    return envModels;
   }
 
   if (userProvidedOpenAI) {
@@ -305,10 +322,11 @@ const fetchAnthropicModels = async (opts, _models = []) => {
 };
 
 const getAnthropicModels = async (opts = {}) => {
+  const mode = normalizeMode(opts.mode);
   let models = defaultModels[EModelEndpoint.anthropic];
-  if (process.env.ANTHROPIC_MODELS) {
-    models = splitAndTrim(process.env.ANTHROPIC_MODELS);
-    return models;
+  const envModels = getModeScopedEnvModels({ key: 'ANTHROPIC_MODELS', mode });
+  if (envModels) {
+    return envModels;
   }
 
   if (isUserProvided(process.env.ANTHROPIC_API_KEY)) {
@@ -323,19 +341,23 @@ const getAnthropicModels = async (opts = {}) => {
   }
 };
 
-const getGoogleModels = () => {
+const getGoogleModels = (opts = {}) => {
+  const mode = normalizeMode(opts.mode);
   let models = defaultModels[EModelEndpoint.google];
-  if (process.env.GOOGLE_MODELS) {
-    models = splitAndTrim(process.env.GOOGLE_MODELS);
+  const envModels = getModeScopedEnvModels({ key: 'GOOGLE_MODELS', mode });
+  if (envModels) {
+    models = envModels;
   }
 
   return models;
 };
 
-const getBedrockModels = () => {
+const getBedrockModels = (opts = {}) => {
+  const mode = normalizeMode(opts.mode);
   let models = defaultModels[EModelEndpoint.bedrock];
-  if (process.env.BEDROCK_AWS_MODELS) {
-    models = splitAndTrim(process.env.BEDROCK_AWS_MODELS);
+  const envModels = getModeScopedEnvModels({ key: 'BEDROCK_AWS_MODELS', mode });
+  if (envModels) {
+    models = envModels;
   }
 
   return models;

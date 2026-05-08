@@ -6,6 +6,7 @@ import { TooltipAnchor, NewChatIcon, MobileSidebar, Sidebar, Button } from '@lib
 import type { TMessage } from 'librechat-data-provider';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { clearMessagesCache } from '~/utils';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 import store from '~/store';
 
 export default function NewChat({
@@ -27,17 +28,18 @@ export default function NewChat({
   const navigate = useNavigate();
   const localize = useLocalize();
   const { conversation } = store.useCreateConversationAtom(index);
+  const { mode } = useConversationMode(index);
 
   const clickHandler: React.MouseEventHandler<HTMLButtonElement> = useCallback(
     (e) => {
       if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
-        window.open('/c/new', '_blank');
+        window.open(`/c/new?mode=${mode}`, '_blank');
         return;
       }
       clearMessagesCache(queryClient, conversation?.conversationId);
       queryClient.invalidateQueries([QueryKeys.messages]);
       newConvo();
-      navigate('/c/new', { state: { focusChat: true } });
+      navigate(`/c/new?mode=${mode}`, { state: { focusChat: true } });
       if (isSmallScreen) {
         toggleNav();
       }

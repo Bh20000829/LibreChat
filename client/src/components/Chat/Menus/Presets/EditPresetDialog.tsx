@@ -22,6 +22,7 @@ import { useSetIndexOptions, useLocalize, useDebouncedInput } from '~/hooks';
 import PopoverButtons from '~/components/Chat/Input/PopoverButtons';
 import { EndpointSettings } from '~/components/Endpoints';
 import { useGetEndpointsQuery } from '~/data-provider';
+import { normalizeConversationMode } from '~/utils/conversationMode';
 import { useChatContext } from '~/Providers';
 import store from '~/store';
 
@@ -66,7 +67,10 @@ const EditPresetDialog = ({
       return;
     }
 
-    const modelsConfig = queryClient.getQueryData<TModelsConfig>([QueryKeys.models]);
+    const modelsConfig = queryClient.getQueryData<TModelsConfig>([
+      QueryKeys.models,
+      { mode: normalizeConversationMode(preset.mode) },
+    ]);
     if (!modelsConfig) {
       return;
     }

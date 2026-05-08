@@ -12,6 +12,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { EModelEndpoint, LocalStorageKeys, QueryKeys } from 'librechat-data-provider';
 import type { TConversation, GroupedConversations } from 'librechat-data-provider';
 import type { InfiniteData } from '@tanstack/react-query';
+import { getModeLastModelKey, normalizeConversationMode } from './conversationMode';
 
 // Date group helpers
 export const dateKeys = {
@@ -141,6 +142,19 @@ export type ConversationCursorData = {
   conversations: TConversation[];
   nextCursor?: string | null;
 };
+
+function getConversationQueryMode(queryKey: readonly unknown[]) {
+  const params = queryKey[1];
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    return 'chat';
+  }
+
+  return normalizeConversationMode((params as { mode?: TConversation['mode'] }).mode);
+}
+
+function shouldAffectConversationQuery(queryKey: readonly unknown[], conversation: TConversation) {
+  return getConversationQueryMode(queryKey) === normalizeConversationMode(conversation.mode);
+}
 
 // === InfiniteData helpers for cursor-based convo queries ===
 
@@ -310,12 +324,14 @@ export function storeEndpointSettings(conversation: TConversation | null) {
   if (!endpoint) {
     return;
   }
-  const lastModel = JSON.parse(localStorage.getItem(LocalStorageKeys.LAST_MODEL) ?? '{}');
+  const mode = normalizeConversationMode(conversation.mode);
+  const lastModelKey = getModeLastModelKey(mode);
+  const lastModel = JSON.parse(localStorage.getItem(lastModelKey) ?? '{}');
   lastModel[endpoint] = model;
   if (endpoint === EModelEndpoint.gptPlugins) {
     lastModel.secondaryModel = agentOptions?.model ?? model ?? '';
   }
-  localStorage.setItem(LocalStorageKeys.LAST_MODEL, JSON.stringify(lastModel));
+  localStorage.setItem(lastModelKey, JSON.stringify(lastModel));
 }
 
 // Add
@@ -325,6 +341,10 @@ export function addConvoToAllQueries(queryClient: QueryClient, newConvo: TConver
     .findAll([QueryKeys.allConversations], { exact: false });
 
   for (const query of queries) {
+    if (!shouldAffectConversationQuery(query.queryKey, newConvo)) {
+      continue;
+    }
+
     queryClient.setQueryData<InfiniteData<ConversationCursorData>>(query.queryKey, (oldData) => {
       if (!oldData) {
         return oldData;
@@ -365,12 +385,34 @@ export function updateConvoInAllQueries(
       if (!oldData) {
         return oldData;
       }
+
+      const existingConversation = oldData.pages
+        .flatMap((page) => page.conversations)
+        .find((c) => c.conversationId === conversationId);
+
+      if (!existingConversation) {
+        return oldData;
+      }
+
+      const updatedConversation = updater(existingConversation);
+      if (!shouldAffectConversationQuery(query.queryKey, updatedConversation)) {
+        return {
+          ...oldData,
+          pages: oldData.pages
+            .map((page) => ({
+              ...page,
+              conversations: page.conversations.filter((c) => c.conversationId !== conversationId),
+            }))
+            .filter((page) => page.conversations.length > 0),
+        };
+      }
+
       return {
         ...oldData,
         pages: oldData.pages.map((page) => ({
           ...page,
           conversations: page.conversations.map((c) =>
-            c.conversationId === conversationId ? updater(c) : c,
+            c.conversationId === conversationId ? updatedConversation : c,
           ),
         })),
       };

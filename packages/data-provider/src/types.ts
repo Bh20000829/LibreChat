@@ -103,6 +103,7 @@ export type TEphemeralAgent = {
 
 export type TPayload = Partial<TMessage> &
   Partial<TEndpointOption> & {
+    mode?: TConversation['mode'];
     isContinued: boolean;
     isRegenerate?: boolean;
     conversationId: string | null;

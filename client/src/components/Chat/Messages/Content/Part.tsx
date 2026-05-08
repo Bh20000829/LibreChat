@@ -213,6 +213,26 @@ const Part = memo(
           }}
         />
       );
+    } else if (part.type === ContentTypes.IMAGE_URL) {
+      const imageUrl =
+        typeof part.image_url === 'string' ? part.image_url : part.image_url?.url ?? '';
+
+      if (!imageUrl) {
+        return null;
+      }
+
+      return (
+        <Image
+          imagePath={imageUrl}
+          height={1024}
+          width={1024}
+          altText="Generated Image"
+          placeholderDimensions={{
+            height: '1024px',
+            width: '1024px',
+          }}
+        />
+      );
     }
 
     return null;
