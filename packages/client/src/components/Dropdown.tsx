@@ -41,6 +41,10 @@ const Dropdown: React.FC<DropdownProps> = ({
   'aria-labelledby': ariaLabelledBy,
   portal = true,
 }) => {
+  const [open, setOpen] = React.useState(false);
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const popoverRef = React.useRef<HTMLDivElement | null>(null);
+
   const handleChange = (value: string) => {
     onChange(value);
   };
@@ -48,7 +52,33 @@ const Dropdown: React.FC<DropdownProps> = ({
   const selectProps = Select.useSelectStore({
     value: selectedValue,
     setValue: handleChange,
+    open,
+    setOpen,
   });
+
+  React.useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) {
+        return;
+      }
+
+      setOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+    };
+  }, [open]);
 
   const getOptionObject = (val: string | undefined): Option | undefined => {
     if (val == null || val === '') {
@@ -71,6 +101,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   return (
     <div className={cn('relative', className)}>
       <Select.Select
+        ref={triggerRef}
         store={selectProps}
         className={cn(
           'focus:ring-offset-ring-offset relative inline-flex items-center justify-between rounded-xl border border-input bg-background px-3 py-2 text-sm text-text-primary transition-all duration-200 ease-in-out hover:bg-accent hover:text-accent-foreground focus:ring-ring-primary',
@@ -99,6 +130,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         {!iconOnly && <Select.SelectArrow />}
       </Select.Select>
       <Select.SelectPopover
+        ref={popoverRef}
         portal={portal}
         store={selectProps}
         className={cn(

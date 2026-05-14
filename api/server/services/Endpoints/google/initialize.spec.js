@@ -98,4 +98,35 @@ describe('google/initializeClient', () => {
       /expired_user_key/,
     );
   });
+
+  test('should pass overrideModel into GoogleClient modelOptions', async () => {
+    process.env.GOOGLE_KEY = 'service_key';
+    process.env.GOOGLE_REVERSE_PROXY = 'http://reverse.proxy';
+    process.env.PROXY = 'http://proxy';
+
+    const req = {
+      body: { key: null },
+      user: { id: '123' },
+      app,
+      config: {
+        endpoints: {
+          all: {},
+          google: {},
+        },
+      },
+    };
+    const res = {};
+    const endpointOption = { model_parameters: { model: 'fallback-model' } };
+
+    const { client } = await initializeClient({
+      req,
+      res,
+      endpointOption,
+      overrideModel: 'gemini-3-pro-image-preview',
+    });
+
+    expect(client).toBeInstanceOf(GoogleClient);
+    expect(client.modelOptions.model).toBe('gemini-3-pro-image-preview');
+    expect(client.options.modelOptions.model).toBe('gemini-3-pro-image-preview');
+  });
 });

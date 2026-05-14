@@ -30,9 +30,11 @@ const quota = require('./quota');
 const modelPricing = require('./modelPricing');
 const userManagement = require('./userManagement');
 const mcp = require('./mcp');
+const imageFavorites = require('./imageFavorites');
 
 module.exports = {
   mcp,
+  imageFavorites,
   edit,
   auth,
   keys,

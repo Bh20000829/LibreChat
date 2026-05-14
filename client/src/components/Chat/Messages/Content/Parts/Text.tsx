@@ -2,7 +2,8 @@ import { memo, useMemo, ReactElement } from 'react';
 import { useRecoilValue } from 'recoil';
 import MarkdownLite from '~/components/Chat/Messages/Content/MarkdownLite';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
-import { useMessageContext } from '~/Providers';
+import { useChatContext, useMessageContext } from '~/Providers';
+import ImageGenerationPlaceholder from '../ImageGenerationPlaceholder';
 import { cn } from '~/utils';
 import store from '~/store';
 
@@ -18,9 +19,12 @@ type ContentType =
   | ReactElement;
 
 const TextPart = memo(({ text, isCreatedByUser, showCursor }: TextPartProps) => {
+  const { conversation } = useChatContext();
   const { isSubmitting = false, isLatestMessage = false } = useMessageContext();
   const enableUserMsgMarkdown = useRecoilValue(store.enableUserMsgMarkdown);
   const showCursorState = useMemo(() => showCursor && isSubmitting, [showCursor, isSubmitting]);
+  const shouldShowImagePlaceholder =
+    conversation?.mode === 'image' && !isCreatedByUser && isSubmitting && text.trim().length === 0;
 
   const content: ContentType = useMemo(() => {
     if (!isCreatedByUser) {
@@ -31,6 +35,10 @@ const TextPart = memo(({ text, isCreatedByUser, showCursor }: TextPartProps) => 
       return <>{text}</>;
     }
   }, [isCreatedByUser, enableUserMsgMarkdown, text, isLatestMessage]);
+
+  if (shouldShowImagePlaceholder) {
+    return <ImageGenerationPlaceholder progress={0.1} className="max-w-lg" />;
+  }
 
   return (
     <div

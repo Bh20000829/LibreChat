@@ -42,8 +42,10 @@ router.use(setHeaders);
 
 const controller = async (req, res, next) => {
   if (req.body?.mode === 'image') {
-    if (req.body?.endpoint !== EModelEndpoint.openAI) {
-      return handleError(res, { text: 'Only OpenAI image generation is supported right now' });
+    if (![EModelEndpoint.openAI, EModelEndpoint.google].includes(req.body?.endpoint)) {
+      return handleError(res, {
+        text: 'Image generation is only supported for OpenAI and Google right now',
+      });
     }
 
     req.body.model = req.body.model ?? req.body.endpointOption?.model_parameters?.model;

@@ -355,7 +355,9 @@ export default function DialogImage({ isOpen, onOpenChange, src = '', downloadIm
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-text-primary">{localize('com_ui_size')}:</span>
                     <span className="text-sm font-medium text-text-primary">
-                      {args?.size || 'Unknown'}
+                      {args?.width != null && args?.height != null
+                        ? `${args.width} x ${args.height}`
+                        : 'Unknown'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">

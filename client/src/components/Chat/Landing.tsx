@@ -1,12 +1,13 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { easings } from '@react-spring/web';
 import { EModelEndpoint } from 'librechat-data-provider';
+import { ImagePlus, MessageSquareText } from 'lucide-react';
 import { BirthdayIcon, TooltipAnchor, SplitText } from '@librechat/client';
 import { useChatContext, useAgentsMapContext, useAssistantsMapContext } from '~/Providers';
 import { useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
 import ConvoIcon from '~/components/Endpoints/ConvoIcon';
 import { useLocalize, useAuthContext } from '~/hooks';
-import { getIconEndpoint, getEntity } from '~/utils';
+import { cn, getIconEndpoint, getEntity } from '~/utils';
 
 const containerClassName =
   'shadow-stroke relative flex h-full items-center justify-center rounded-full bg-white dark:bg-presentation dark:text-white text-black dark:after:shadow-none ';
@@ -69,6 +70,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
 
   const name = entity?.name ?? '';
   const description = (entity?.description || conversation?.greeting) ?? '';
+  const isImageMode = conversation?.mode === 'image';
 
   const getGreeting = useCallback(() => {
     if (typeof startupConfig?.interface?.customWelcome === 'string') {
@@ -209,6 +211,14 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
             {description}
           </div>
         )}
+        <div
+          className={cn(
+            'mt-4 inline-flex items-center gap-2 rounded-full border border-border-light bg-surface-secondary/90 px-3 py-1.5 text-sm text-text-secondary shadow-sm',
+          )}
+        >
+          {isImageMode ? <ImagePlus className="size-4" /> : <MessageSquareText className="size-4" />}
+          <span>{isImageMode ? localize('com_ui_image_gen') : localize('com_ui_chat')}</span>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import debounce from 'lodash/debounce';
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRecoilValue, useRecoilState } from 'recoil';
 import type { TEndpointOption } from 'librechat-data-provider';
 import type { KeyboardEvent } from 'react';
@@ -61,6 +61,56 @@ export default function useTextarea({
     !isAssistant;
   // && (conversationId?.length ?? 0) > 6; // also ensures that we don't show the wrong placeholder
 
+  const placeholderText = useMemo(() => {
+    if (disabled) {
+      return localize('com_endpoint_config_placeholder');
+    }
+
+    const currentEndpoint = conversation?.endpoint ?? '';
+    const currentAgentId = conversation?.agent_id ?? '';
+    const currentAssistantId = conversation?.assistant_id ?? '';
+
+    if (isAgent && (!currentAgentId || !agentsMap?.[currentAgentId])) {
+      return localize('com_endpoint_agent_placeholder');
+    }
+
+    if (
+      isAssistant &&
+      (!currentAssistantId || !assistantMap?.[currentEndpoint]?.[currentAssistantId])
+    ) {
+      return localize('com_endpoint_assistant_placeholder');
+    }
+
+    if (isNotAppendable) {
+      return localize('com_endpoint_message_not_appendable');
+    }
+
+    const imageModeModelName =
+      conversation?.mode === 'image'
+        ? conversation?.modelLabel ?? conversation?.chatGptLabel ?? conversation?.model ?? ''
+        : '';
+
+    const sender =
+      isAssistant || isAgent
+        ? getEntityName({ name: entityName, isAgent, localize })
+        : imageModeModelName || getSender(conversation as TEndpointOption);
+
+    return localize('com_endpoint_message_new', {
+      0: sender ? sender : localize('com_endpoint_ai'),
+    });
+  }, [
+    assistantMap,
+    agentsMap,
+    conversation,
+    disabled,
+    entityName,
+    getSender,
+    isAgent,
+    isAssistant,
+    isNotAppendable,
+    localize,
+  ]);
+
   useEffect(() => {
     const prompt = activePrompt ?? '';
     if (prompt && textAreaRef.current) {
@@ -76,47 +126,13 @@ export default function useTextarea({
       return;
     }
 
-    const getPlaceholderText = () => {
-      if (disabled) {
-        return localize('com_endpoint_config_placeholder');
-      }
-      const currentEndpoint = conversation?.endpoint ?? '';
-      const currentAgentId = conversation?.agent_id ?? '';
-      const currentAssistantId = conversation?.assistant_id ?? '';
-      if (isAgent && (!currentAgentId || !agentsMap?.[currentAgentId])) {
-        return localize('com_endpoint_agent_placeholder');
-      } else if (
-        isAssistant &&
-        (!currentAssistantId || !assistantMap?.[currentEndpoint]?.[currentAssistantId])
-      ) {
-        return localize('com_endpoint_assistant_placeholder');
-      }
-
-      if (isNotAppendable) {
-        return localize('com_endpoint_message_not_appendable');
-      }
-
-      const sender =
-        isAssistant || isAgent
-          ? getEntityName({ name: entityName, isAgent, localize })
-          : getSender(conversation as TEndpointOption);
-
-      return `${localize('com_endpoint_message_new', {
-        0: sender ? sender : localize('com_endpoint_ai'),
-      })}`;
-    };
-
-    const placeholder = getPlaceholderText();
-
-    if (textAreaRef.current?.getAttribute('placeholder') === placeholder) {
+    if (textAreaRef.current?.getAttribute('placeholder') === placeholderText) {
       return;
     }
 
     const setPlaceholder = () => {
-      const placeholder = getPlaceholderText();
-
-      if (textAreaRef.current?.getAttribute('placeholder') !== placeholder) {
-        textAreaRef.current?.setAttribute('placeholder', placeholder);
+      if (textAreaRef.current?.getAttribute('placeholder') !== placeholderText) {
+        textAreaRef.current?.setAttribute('placeholder', placeholderText);
         forceResize(textAreaRef.current);
       }
     };
@@ -126,18 +142,8 @@ export default function useTextarea({
 
     return () => debouncedSetPlaceholder.cancel();
   }, [
-    isAgent,
-    localize,
-    disabled,
-    getSender,
-    agentsMap,
-    entityName,
     textAreaRef,
-    isAssistant,
-    assistantMap,
-    conversation,
-    latestMessage,
-    isNotAppendable,
+    placeholderText,
   ]);
 
   const handleKeyDown = useCallback(
@@ -239,6 +245,7 @@ export default function useTextarea({
     handlePaste,
     handleKeyDown,
     isNotAppendable,
+    placeholderText,
     handleCompositionEnd,
     handleCompositionStart,
   };

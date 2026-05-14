@@ -57,6 +57,10 @@ function AttachFileChat({
     [disableInputs, endpointFileConfig?.disabled],
   );
 
+  if (conversation?.mode === 'image' && endpointSupportsFiles && !isUploadDisabled) {
+    return <AttachFile disabled={disableInputs} isImageMode />;
+  }
+
   if (isAssistants && endpointSupportsFiles && !isUploadDisabled) {
     return <AttachFile disabled={disableInputs} />;
   } else if (isAgents || (endpointSupportsFiles && !isUploadDisabled)) {
@@ -66,6 +70,7 @@ function AttachFileChat({
         disabled={disableInputs}
         endpointType={endpointType}
         conversationId={conversationId}
+        isImageMode={conversation?.mode === 'image'}
         agentId={conversation?.agent_id}
         endpointFileConfig={endpointFileConfig}
       />

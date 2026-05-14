@@ -67,7 +67,9 @@ const createModelPricingController = async (req, res) => {
     if (error.message?.includes('must be a non-negative number')) {
       return res.status(400).json({ message: error.message });
     }
-    return res.status(500).json({ message: 'Failed to create model pricing', error: error.message });
+    return res
+      .status(500)
+      .json({ message: 'Failed to create model pricing', error: error.message });
   }
 };
 
@@ -137,7 +139,9 @@ const updateModelPricingController = async (req, res) => {
     if (error.message?.includes('must be a non-negative number')) {
       return res.status(400).json({ message: error.message });
     }
-    return res.status(500).json({ message: 'Failed to update model pricing', error: error.message });
+    return res
+      .status(500)
+      .json({ message: 'Failed to update model pricing', error: error.message });
   }
 };
 
@@ -160,7 +164,9 @@ const deleteModelPricingController = async (req, res) => {
       message: 'Model pricing deleted',
     });
   } catch (error) {
-    return res.status(500).json({ message: 'Failed to delete model pricing', error: error.message });
+    return res
+      .status(500)
+      .json({ message: 'Failed to delete model pricing', error: error.message });
   }
 };
 

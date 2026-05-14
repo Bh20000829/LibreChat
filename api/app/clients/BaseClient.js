@@ -764,6 +764,13 @@ class BaseClient {
           userMessagePromise,
           opts,
         });
+        await this.recordTokenUsage({
+          usage,
+          promptTokens,
+          completionTokens,
+          balance: balanceConfig,
+          model: responseMessage.model,
+        });
       } else {
         responseMessage.tokenCount = this.getTokenCountForResponse(responseMessage);
         completionTokens = responseMessage.tokenCount;

@@ -89,7 +89,15 @@ const initializeClient = async ({ req, res, endpointOption, overrideModel, optio
     proxy: PROXY ?? null,
     ...clientOptions,
     ...endpointOption,
+    modelOptions: {
+      ...(endpointOption?.modelOptions ?? {}),
+      ...(endpointOption?.model_parameters ?? {}),
+    },
   };
+
+  if (overrideModel) {
+    clientOptions.modelOptions.model = overrideModel;
+  }
 
   if (optionsOnly) {
     clientOptions = Object.assign(

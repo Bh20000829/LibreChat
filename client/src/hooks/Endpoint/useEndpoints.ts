@@ -82,7 +82,7 @@ export const useEndpoints = ({
   );
 
   const mappedEndpoints: Endpoint[] = useMemo(() => {
-    return filteredEndpoints.map((ep) => {
+    const endpoints = filteredEndpoints.map((ep) => {
       const endpointType = getEndpointField(endpointsConfig, ep, 'type');
       const iconKey = getIconKey({ endpoint: ep, endpointsConfig, endpointType });
       const Icon = icons[iconKey];
@@ -180,7 +180,21 @@ export const useEndpoints = ({
 
       return result;
     });
-  }, [filteredEndpoints, endpointsConfig, modelsQuery.data, agents, assistants, azureAssistants]);
+
+    if (mode !== 'image') {
+      return endpoints;
+    }
+
+    return endpoints.filter((endpoint) => endpoint.hasModels);
+  }, [
+    filteredEndpoints,
+    endpointsConfig,
+    modelsQuery.data,
+    agents,
+    assistants,
+    azureAssistants,
+    mode,
+  ]);
 
   return {
     mappedEndpoints,

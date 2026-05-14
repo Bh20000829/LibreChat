@@ -8,13 +8,26 @@ describe('createChatSearchParams', () => {
       const conversation: Partial<TConversation> = {
         endpoint: EModelEndpoint.openAI,
         model: 'gpt-4',
+        mode: 'image',
         temperature: 0.7,
       };
 
       const result = createChatSearchParams(conversation as TConversation);
+      expect(result.get('mode')).toBe('image');
       expect(result.get('endpoint')).toBe(EModelEndpoint.openAI);
       expect(result.get('model')).toBe('gpt-4');
       expect(result.get('temperature')).toBe('0.7');
+    });
+
+    it('defaults mode to chat when conversation mode is absent', () => {
+      const result = createChatSearchParams({
+        endpoint: EModelEndpoint.google,
+        model: 'gemini-3.1-pro-preview',
+      } as TConversation);
+
+      expect(result.get('mode')).toBe('chat');
+      expect(result.get('endpoint')).toBe(EModelEndpoint.google);
+      expect(result.get('model')).toBe('gemini-3.1-pro-preview');
     });
 
     it('applies only the endpoint property when other conversation fields are absent', () => {
@@ -37,11 +50,13 @@ describe('createChatSearchParams', () => {
       const withAssistantId = createChatSearchParams({
         endpoint: EModelEndpoint.assistants,
         model: 'gpt-4',
+        mode: 'image',
         assistant_id: 'asst_123',
         temperature: 0.7,
       } as TConversation);
 
       expect(withAssistantId.get('assistant_id')).toBe('asst_123');
+      expect(withAssistantId.get('mode')).toBe('image');
       expect(withAssistantId.has('endpoint')).toBe(false);
       expect(withAssistantId.has('model')).toBe(false);
       expect(withAssistantId.has('temperature')).toBe(false);

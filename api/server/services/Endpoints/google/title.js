@@ -4,6 +4,54 @@ const getLogStores = require('~/cache/getLogStores');
 const initializeClient = require('./initialize');
 const { saveConvo } = require('~/models');
 
+const DEFAULT_TITLE_PROMPT =
+  'Generate a concise conversation title in 3 to 8 words. Reply with the title only.';
+
+function buildTitleRequest({ text, responseText, titlePrompt, titlePromptTemplate }) {
+  const conversation = `||>User:\n"${text}"\n||>Response:\n"${JSON.stringify(responseText ?? '')}"`;
+
+  const prompt = titlePrompt ?? DEFAULT_TITLE_PROMPT;
+  const template = titlePromptTemplate ?? '{{conversation}}';
+  return `${prompt}\n\n${template.replace('{{conversation}}', conversation)}`;
+}
+
+function normalizeTitle(title) {
+  if (!title || typeof title !== 'string') {
+    return null;
+  }
+
+  const lines = title
+    .split('\n')
+    .map((line) => line.replace(/[*_`#>]+/g, '').trim())
+    .filter(Boolean);
+
+  const preferredLine =
+    lines.find((line) => !/[.:!?]$/.test(line) && line.split(/\s+/).length <= 12) ?? lines[0];
+  const normalized = preferredLine?.replace(/^['"\s]+|['"\s]+$/g, '') ?? '';
+  return normalized || null;
+}
+
+function buildFallbackTitle(text) {
+  if (!text || typeof text !== 'string') {
+    return null;
+  }
+
+  const normalized = text
+    .replace(/\s+/g, ' ')
+    .replace(/^['"\s]+|['"\s]+$/g, '')
+    .trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (/\s/.test(normalized)) {
+    return normalized.split(' ').filter(Boolean).slice(0, 8).join(' ');
+  }
+
+  return normalized.slice(0, 24).trim();
+}
+
 const addTitle = async (req, { text, response, client }) => {
   const { TITLE_CONVO = 'true' } = process.env ?? {};
   if (!isEnabled(TITLE_CONVO)) {
@@ -19,8 +67,9 @@ const addTitle = async (req, { text, response, client }) => {
   let model =
     providerConfig?.titleModel ??
     GOOGLE_TITLE_MODEL ??
-    client.options?.modelOptions.model ??
-    googleSettings.model.default;
+    client.options?.titleModel ??
+    googleSettings.model.default ??
+    client.options?.modelOptions.model;
 
   if (GOOGLE_TITLE_MODEL === Constants.CURRENT_MODEL) {
     model = client.options?.modelOptions.model;
@@ -41,11 +90,27 @@ const addTitle = async (req, { text, response, client }) => {
   const titleCache = getLogStores(CacheKeys.GEN_TITLE);
   const key = `${req.user.id}-${response.conversationId}`;
 
-  const title = await titleClient.titleConvo({
+  const titleRequest = buildTitleRequest({
     text,
     responseText: response?.text ?? '',
-    conversationId: response.conversationId,
+    titlePrompt: providerConfig?.titlePrompt,
+    titlePromptTemplate: providerConfig?.titlePromptTemplate,
   });
+
+  const generatedTitle = normalizeTitle(
+    await titleClient.chatCompletion({
+      payload: [{ role: 'user', content: titleRequest }],
+      onProgress: () => {},
+      abortController: new AbortController(),
+    }),
+  );
+
+  const title = generatedTitle ?? buildFallbackTitle(text);
+
+  if (!title) {
+    return;
+  }
+
   await titleCache.set(key, title, 120000);
   await saveConvo(
     req,

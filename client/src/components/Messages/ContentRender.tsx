@@ -174,6 +174,7 @@ const ContentRender = memo(
                 enterEdit={enterEdit}
                 siblingIdx={siblingIdx}
                 messageId={msg.messageId}
+                parentMessageId={msg.parentMessageId}
                 attachments={attachments}
                 isSubmitting={isSubmitting}
                 searchResults={searchResults}

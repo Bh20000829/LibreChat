@@ -13,7 +13,8 @@ const safeNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const roundMoney = (value) => Math.round((safeNumber(value) + Number.EPSILON) * 100000000) / 100000000;
+const roundMoney = (value) =>
+  Math.round((safeNumber(value) + Number.EPSILON) * 100000000) / 100000000;
 
 const getEffectivePricing = async ({ model, endpoint, valueKey, endpointTokenConfig }) => {
   const modelName = typeof model === 'string' ? model.trim() : '';
@@ -44,9 +45,10 @@ const getEffectivePricing = async ({ model, endpoint, valueKey, endpointTokenCon
     getCacheMultiplier({ valueKey, cacheType: 'read', model, endpoint, endpointTokenConfig }) ??
       promptRate,
   );
-  const fallbackCacheRate = cacheWriteRate > 0 && cacheReadRate > 0
-    ? (cacheWriteRate + cacheReadRate) / 2
-    : cacheWriteRate || cacheReadRate || promptRate;
+  const fallbackCacheRate =
+    cacheWriteRate > 0 && cacheReadRate > 0
+      ? (cacheWriteRate + cacheReadRate) / 2
+      : cacheWriteRate || cacheReadRate || promptRate;
 
   return {
     inputPriceUsdPer1M: promptRate,
@@ -69,17 +71,13 @@ const calculateUsageCostCny = async ({
   valueKey,
   endpointTokenConfig,
 }) => {
-  const {
-    inputPriceUsdPer1M,
-    cachePriceUsdPer1M,
-    outputPriceUsdPer1M,
-    multiplier,
-  } = await getEffectivePricing({
-    model,
-    endpoint,
-    valueKey,
-    endpointTokenConfig,
-  });
+  const { inputPriceUsdPer1M, cachePriceUsdPer1M, outputPriceUsdPer1M, multiplier } =
+    await getEffectivePricing({
+      model,
+      endpoint,
+      valueKey,
+      endpointTokenConfig,
+    });
 
   const input = Math.max(0, Math.floor(safeNumber(inputTokens)));
   const output = Math.max(0, Math.floor(safeNumber(outputTokens)));
@@ -90,9 +88,7 @@ const calculateUsageCostCny = async ({
   const usdToCnyRate = getUsdToCnyRate();
 
   const usageUsd =
-    ((input * inputPriceUsdPer1M +
-      cache * cachePriceUsdPer1M +
-      output * outputPriceUsdPer1M) /
+    ((input * inputPriceUsdPer1M + cache * cachePriceUsdPer1M + output * outputPriceUsdPer1M) /
       TOKENS_PER_MILLION) *
     multiplier;
 

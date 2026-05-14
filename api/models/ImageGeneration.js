@@ -35,9 +35,23 @@ const imageGenerationSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    operationType: {
+      type: String,
+      enum: ['generation', 'edit'],
+      default: 'generation',
+      index: true,
+    },
     prompt: {
       type: String,
       required: true,
+    },
+    sourceImageFileIds: {
+      type: [String],
+      default: [],
+    },
+    sourceImageCount: {
+      type: Number,
+      default: 0,
     },
     responseText: {
       type: String,
@@ -51,6 +65,15 @@ const imageGenerationSchema = new mongoose.Schema(
     imageCount: {
       type: Number,
       default: 0,
+    },
+    isFavorite: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    favoritedAt: {
+      type: Number,
+      index: true,
     },
     providerResponse: {
       type: mongoose.Schema.Types.Mixed,

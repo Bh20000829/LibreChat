@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react';
+import { useToastContext } from '@librechat/client';
 import { Search, Users, ShieldCheck, Save } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TDialogProps } from '~/common';
@@ -36,6 +37,7 @@ const formatMoney4 = (value: number) =>
     minimumFractionDigits: 4,
     maximumFractionDigits: 4,
   }).format(Number.isFinite(value) ? value : 0);
+const CACHE_TOKENS_LABEL = 'Cache Tokens';
 
 const normalizeDateInput = (value?: string) => {
   if (!value || typeof value !== 'string') {
@@ -43,7 +45,7 @@ const normalizeDateInput = (value?: string) => {
   }
 
   const trimmed = value.trim();
-  const matched = trimmed.match(/^(\d{4})[-\/](\d{2})[-\/](\d{2})$/);
+  const matched = trimmed.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
   if (!matched) {
     return undefined;
   }
@@ -69,6 +71,7 @@ const getQuotaUsers = async (token?: string): Promise<QuotaUsersResponse> => {
 
 export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
   const localize = useLocalize();
+  const { showToast } = useToastContext();
   const { token } = useAuthContext();
   const queryClient = useQueryClient();
   const [users, setUsers] = useState<QuotaUser[]>([]);
@@ -112,6 +115,11 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
     },
     onSuccess: async () => {
       setStatusText(localize('com_quota_save_success'));
+      showToast({
+        message: localize('com_quota_save_success'),
+        status: 'success',
+        duration: 1600,
+      });
       await queryClient.invalidateQueries({ queryKey: ['quota-users'] });
     },
     onError: (error: unknown) => {
@@ -169,10 +177,13 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
           <div className="fixed inset-0 flex w-screen items-center justify-center p-4">
             <DialogPanel
               className={cn(
-                'w-full max-w-[98vw] xl:max-w-[92rem] overflow-hidden rounded-xl rounded-b-lg bg-background shadow-2xl backdrop-blur-2xl animate-in sm:rounded-2xl',
+                'w-full max-w-[98vw] overflow-hidden rounded-xl rounded-b-lg bg-background shadow-2xl backdrop-blur-2xl animate-in sm:rounded-2xl xl:max-w-[92rem]',
               )}
             >
-              <DialogTitle className="flex items-center justify-between border-b border-border-light px-6 py-4" as="div">
+              <DialogTitle
+                className="flex items-center justify-between border-b border-border-light px-6 py-4"
+                as="div"
+              >
                 <div className="flex items-center gap-2 text-text-primary">
                   <ShieldCheck className="h-5 w-5" />
                   <h2 className="text-lg font-medium leading-6">
@@ -232,21 +243,43 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
                   <table className="min-w-[1580px] divide-y divide-border-light text-sm">
                     <thead className="bg-surface-secondary text-left text-text-secondary">
                       <tr>
-                        <th className="sticky top-0 z-10 px-3 py-3 font-medium bg-surface-secondary">{localize('com_quota_user')}</th>
-                        <th className="sticky top-0 z-10 px-3 py-3 font-medium bg-surface-secondary">{localize('com_user_mgmt_group_type')}</th>
-                        <th className="sticky top-0 z-10 min-w-[80px] px-3 py-3 font-medium bg-surface-secondary">{localize('com_quota_used_input_tokens')}</th>
-                        <th className="sticky top-0 z-10 min-w-[80px] px-3 py-3 font-medium bg-surface-secondary">Cache Tokens</th>
-                        <th className="sticky top-0 z-10 min-w-[80px] px-3 py-3 font-medium bg-surface-secondary">{localize('com_quota_used_output_tokens')}</th>
-                        <th className="sticky top-0 z-10 px-3 py-3 font-medium bg-surface-secondary">{localize('com_quota_used_today_rmb')}</th>
-                        <th className="sticky top-0 z-10 w-[96px] min-w-[96px] px-2 py-3 font-medium bg-surface-secondary">{localize('com_quota_used_month_rmb')}</th>
-                        <th className="sticky top-0 z-10 w-[96px] min-w-[96px] px-2 py-3 font-medium bg-surface-secondary">{localize('com_quota_used_last_month_rmb')}</th>
-                        <th className="sticky top-0 z-10 pl-2 pr-1 py-3 font-medium bg-surface-secondary">{localize('com_quota_start_date')}</th>
-                        <th className="sticky top-0 z-10 pl-1 pr-3 py-3 font-medium bg-surface-secondary">{localize('com_quota_cycle_days')}</th>
-                        <th className="sticky top-0 z-10 px-3 py-3 font-medium bg-surface-secondary">{localize('com_quota_daily_quota_rmb')}</th>
-                        <th className="sticky top-0 right-[108px] z-30 w-[88px] min-w-[88px] px-2 py-3 font-medium bg-surface-secondary">
+                        <th className="sticky top-0 z-10 bg-surface-secondary px-3 py-3 font-medium">
+                          {localize('com_quota_user')}
+                        </th>
+                        <th className="sticky top-0 z-10 bg-surface-secondary px-3 py-3 font-medium">
+                          {localize('com_user_mgmt_group_type')}
+                        </th>
+                        <th className="sticky top-0 z-10 min-w-[80px] bg-surface-secondary px-3 py-3 font-medium">
+                          {localize('com_quota_used_input_tokens')}
+                        </th>
+                        <th className="sticky top-0 z-10 min-w-[80px] bg-surface-secondary px-3 py-3 font-medium">
+                          {CACHE_TOKENS_LABEL}
+                        </th>
+                        <th className="sticky top-0 z-10 min-w-[80px] bg-surface-secondary px-3 py-3 font-medium">
+                          {localize('com_quota_used_output_tokens')}
+                        </th>
+                        <th className="sticky top-0 z-10 bg-surface-secondary px-3 py-3 font-medium">
+                          {localize('com_quota_used_today_rmb')}
+                        </th>
+                        <th className="sticky top-0 z-10 w-[96px] min-w-[96px] bg-surface-secondary px-2 py-3 font-medium">
+                          {localize('com_quota_used_month_rmb')}
+                        </th>
+                        <th className="sticky top-0 z-10 w-[96px] min-w-[96px] bg-surface-secondary px-2 py-3 font-medium">
+                          {localize('com_quota_used_last_month_rmb')}
+                        </th>
+                        <th className="sticky top-0 z-10 bg-surface-secondary py-3 pl-2 pr-1 font-medium">
+                          {localize('com_quota_start_date')}
+                        </th>
+                        <th className="sticky top-0 z-10 bg-surface-secondary py-3 pl-1 pr-3 font-medium">
+                          {localize('com_quota_cycle_days')}
+                        </th>
+                        <th className="sticky top-0 z-10 bg-surface-secondary px-3 py-3 font-medium">
+                          {localize('com_quota_daily_quota_rmb')}
+                        </th>
+                        <th className="sticky right-[108px] top-0 z-30 w-[88px] min-w-[88px] bg-surface-secondary px-2 py-3 font-medium">
                           {localize('com_quota_remaining_rmb')}
                         </th>
-                        <th className="sticky top-0 right-0 z-30 w-[108px] min-w-[108px] pl-2 pr-3 py-3 font-medium bg-surface-secondary">
+                        <th className="sticky right-0 top-0 z-30 w-[108px] min-w-[108px] bg-surface-secondary py-3 pl-2 pr-3 font-medium">
                           {localize('com_user_mgmt_actions')}
                         </th>
                       </tr>
@@ -281,13 +314,23 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
                               </div>
                             </td>
                             <td className="px-3 py-3">{user.groupType ?? '-'}</td>
-                            <td className="min-w-[80px] px-3 py-3">{formatNumber(user.usedInputTokens)}</td>
-                            <td className="min-w-[80px] px-3 py-3">{formatNumber(user.usedCacheTokens ?? 0)}</td>
-                            <td className="min-w-[80px] px-3 py-3">{formatNumber(user.usedOutputTokens)}</td>
+                            <td className="min-w-[80px] px-3 py-3">
+                              {formatNumber(user.usedInputTokens)}
+                            </td>
+                            <td className="min-w-[80px] px-3 py-3">
+                              {formatNumber(user.usedCacheTokens ?? 0)}
+                            </td>
+                            <td className="min-w-[80px] px-3 py-3">
+                              {formatNumber(user.usedOutputTokens)}
+                            </td>
                             <td className="px-3 py-3">{formatMoney4(usedCycleCny)}</td>
-                            <td className="w-[96px] min-w-[96px] px-2 py-3">{formatMoney4(user.usedMonthCny ?? 0)}</td>
-                            <td className="w-[96px] min-w-[96px] px-2 py-3">{formatMoney4(user.lastMonthCny ?? 0)}</td>
-                            <td className="pl-2 pr-1 py-3">
+                            <td className="w-[96px] min-w-[96px] px-2 py-3">
+                              {formatMoney4(user.usedMonthCny ?? 0)}
+                            </td>
+                            <td className="w-[96px] min-w-[96px] px-2 py-3">
+                              {formatMoney4(user.lastMonthCny ?? 0)}
+                            </td>
+                            <td className="py-3 pl-2 pr-1">
                               <input
                                 type="date"
                                 value={normalizeDateInput(user.quotaStartDate) ?? ''}
@@ -299,7 +342,7 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
                                 className="h-9 w-[7rem] min-w-0 rounded-md border border-border-light bg-surface-primary px-1 text-sm outline-none focus:border-border-xheavy"
                               />
                             </td>
-                            <td className="pl-1 pr-3 py-3">
+                            <td className="py-3 pl-1 pr-3">
                               <input
                                 type="number"
                                 min={1}
@@ -308,7 +351,8 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
                                 onChange={(e) => {
                                   const value = Number(e.target.value);
                                   updateUser(user.id, {
-                                    quotaCycleDays: Number.isFinite(value) && value >= 1 ? Math.floor(value) : 1,
+                                    quotaCycleDays:
+                                      Number.isFinite(value) && value >= 1 ? Math.floor(value) : 1,
                                   });
                                 }}
                                 className="h-9 w-16 rounded-md border border-border-light bg-surface-primary px-1 text-sm outline-none focus:border-border-xheavy"
@@ -329,14 +373,14 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
                                 className="h-9 w-20 rounded-md border border-border-light bg-surface-primary px-1 text-sm outline-none focus:border-border-xheavy"
                               />
                             </td>
-                            <td className="sticky right-[108px] z-10 w-[88px] min-w-[88px] px-2 py-3 bg-background">
+                            <td className="sticky right-[108px] z-10 w-[88px] min-w-[88px] bg-background px-2 py-3">
                               {formatMoney4(
                                 Number.isFinite(user.remainingBalanceCny)
                                   ? user.remainingBalanceCny
                                   : remaining,
                               )}
                             </td>
-                            <td className="sticky right-0 z-10 w-[108px] min-w-[108px] pl-2 pr-3 py-3 bg-background">
+                            <td className="sticky right-0 z-10 w-[108px] min-w-[108px] bg-background py-3 pl-2 pr-3">
                               <button
                                 type="button"
                                 onClick={() => saveMutation.mutate(user)}

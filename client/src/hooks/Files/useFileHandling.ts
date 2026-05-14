@@ -248,6 +248,20 @@ const useFileHandling = (params?: UseFileHandling) => {
   const handleFiles = async (_files: FileList | File[], _toolResource?: string) => {
     abortControllerRef.current = new AbortController();
     const fileList = Array.from(_files);
+
+    if (conversation?.mode === 'image' && (_toolResource == null || _toolResource === '')) {
+      const existingImageCount = Array.from(files.values()).filter((file) =>
+        file.type?.startsWith('image/'),
+      ).length;
+      const incomingImageCount = fileList.filter((file) => file.type.startsWith('image/')).length;
+
+      if (existingImageCount + incomingImageCount > 1) {
+        setError('com_ui_image_edit_single_upload_only');
+        setFilesLoading(false);
+        return;
+      }
+    }
+
     /* Validate files */
     let filesAreValid: boolean;
     try {

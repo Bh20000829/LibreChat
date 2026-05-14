@@ -13,6 +13,7 @@ const { getAppConfig } = require('./app');
  * @param {ServerRequest} req - The Express request object.
  */
 async function loadConfigModels(req) {
+  const mode = req.query?.mode === 'image' ? 'image' : 'chat';
   const appConfig = await getAppConfig({ role: req.user?.role });
   if (!appConfig) {
     return {};
@@ -31,6 +32,10 @@ async function loadConfigModels(req) {
 
   if (azureConfig?.assistants && azureConfig.assistantModels) {
     modelsConfig[EModelEndpoint.azureAssistants] = azureConfig.assistantModels;
+  }
+
+  if (mode === 'image') {
+    return modelsConfig;
   }
 
   if (!Array.isArray(appConfig.endpoints?.[EModelEndpoint.custom])) {

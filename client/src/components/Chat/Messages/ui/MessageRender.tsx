@@ -4,6 +4,7 @@ import { useRecoilValue } from 'recoil';
 import { type TMessage } from 'librechat-data-provider';
 import type { TMessageProps, TMessageIcon } from '~/common';
 import MessageContent from '~/components/Chat/Messages/Content/MessageContent';
+import ImageGenerationPlaceholder from '~/components/Chat/Messages/Content/ImageGenerationPlaceholder';
 import PlaceholderRow from '~/components/Chat/Messages/ui/PlaceholderRow';
 import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
 import HoverButtons from '~/components/Chat/Messages/HoverButtons';
@@ -75,6 +76,11 @@ const MessageRender = memo(
 
     /** Only pass isSubmitting to the latest message to prevent unnecessary re-renders */
     const effectiveIsSubmitting = isLatestMessage ? isSubmitting : false;
+    const shouldShowImagePlaceholder =
+      conversation?.mode === 'image' &&
+      msg.isCreatedByUser !== true &&
+      effectiveIsSubmitting &&
+      (msg.text?.trim().length ?? 0) === 0;
 
     const iconData: TMessageIcon = useMemo(
       () => ({
@@ -179,20 +185,26 @@ const MessageRender = memo(
                 }}
               >
                 {msg.plugin && <Plugin plugin={msg.plugin} />}
-                <MessageContent
-                  ask={ask}
-                  edit={edit}
-                  isLast={isLast}
-                  text={msg.text || ''}
-                  message={msg}
-                  enterEdit={enterEdit}
-                  error={!!(msg.error ?? false)}
-                  isSubmitting={effectiveIsSubmitting}
-                  unfinished={msg.unfinished ?? false}
-                  isCreatedByUser={msg.isCreatedByUser ?? true}
-                  siblingIdx={siblingIdx ?? 0}
-                  setSiblingIdx={setSiblingIdx ?? (() => ({}))}
-                />
+                {shouldShowImagePlaceholder ? (
+                  <div className="w-full max-w-lg pt-1">
+                    <ImageGenerationPlaceholder progress={0.1} />
+                  </div>
+                ) : (
+                  <MessageContent
+                    ask={ask}
+                    edit={edit}
+                    isLast={isLast}
+                    text={msg.text || ''}
+                    message={msg}
+                    enterEdit={enterEdit}
+                    error={!!(msg.error ?? false)}
+                    isSubmitting={effectiveIsSubmitting}
+                    unfinished={msg.unfinished ?? false}
+                    isCreatedByUser={msg.isCreatedByUser ?? true}
+                    siblingIdx={siblingIdx ?? 0}
+                    setSiblingIdx={setSiblingIdx ?? (() => ({}))}
+                  />
+                )}
               </MessageContext.Provider>
             </div>
 

@@ -779,6 +779,45 @@ describe('BaseClient', () => {
       expect(TestClient.getTokenCountForResponse).toHaveBeenCalledWith(response);
     });
 
+    test('records token usage when stream usage metadata is available', async () => {
+      const tokenCountMap = { existing: 1 };
+      TestClient.buildMessages.mockResolvedValue({
+        prompt: [],
+        tokenCountMap,
+        promptTokens: 12,
+      });
+      TestClient.getStreamUsage = jest.fn().mockReturnValue({
+        [TestClient.inputTokensKey]: 12,
+        [TestClient.outputTokensKey]: 34,
+      });
+      TestClient.updateUserMessageTokenCount = jest.fn().mockResolvedValue();
+      TestClient.recordTokenUsage = jest.fn().mockResolvedValue();
+      TestClient.getTokenCountForResponse = jest.fn();
+
+      await TestClient.sendMessage('Hello, world!', {});
+
+      expect(TestClient.updateUserMessageTokenCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          usage: {
+            [TestClient.inputTokensKey]: 12,
+            [TestClient.outputTokensKey]: 34,
+          },
+          tokenCountMap,
+        }),
+      );
+      expect(TestClient.recordTokenUsage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          usage: {
+            [TestClient.inputTokensKey]: 12,
+            [TestClient.outputTokensKey]: 34,
+          },
+          promptTokens: 12,
+          completionTokens: 34,
+        }),
+      );
+      expect(TestClient.getTokenCountForResponse).not.toHaveBeenCalled();
+    });
+
     test('returns an object with the correct shape', async () => {
       const response = await TestClient.sendMessage('Hello, world!', {});
       expect(response).toEqual(

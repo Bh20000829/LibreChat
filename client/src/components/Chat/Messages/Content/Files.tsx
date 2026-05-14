@@ -28,8 +28,7 @@ const Files = ({ message }: { message?: TMessage }) => {
               height: `${file.height ?? 1920}px`,
               width: `${file.height ?? 1080}px`,
             }}
-            // n={imageFiles.length}
-            // i={i}
+            args={{ prompt: typeof message?.text === 'string' ? message.text : undefined }}
           />
         ))}
     </>

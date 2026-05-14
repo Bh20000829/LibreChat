@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
-import type { TMessageContentParts } from 'librechat-data-provider';
+import type { TAttachment, TMessageContentParts } from 'librechat-data-provider';
 import type { TMessageProps, TMessageIcon } from '~/common';
 import { useMessageHelpers, useLocalize, useAttachments } from '~/hooks';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
 import ContentParts from './Content/ContentParts';
+import ImageGenerationPlaceholder from '~/components/Chat/Messages/Content/ImageGenerationPlaceholder';
 import { fontSizeAtom } from '~/store/fontSize';
 import SiblingSwitch from './SiblingSwitch';
 import MultiMessage from './MultiMessage';
@@ -85,6 +86,12 @@ export default function Message(props: TMessageProps) {
       ? 'w-full max-w-full md:px-5 lg:px-1 xl:px-5'
       : 'md:max-w-[47rem] xl:max-w-[55rem]',
   };
+  const shouldShowImagePlaceholder =
+    conversation?.mode === 'image' &&
+    message.isCreatedByUser !== true &&
+    isLast &&
+    isSubmitting &&
+    (!Array.isArray(message.content) || message.content.length === 0);
 
   return (
     <>
@@ -115,21 +122,28 @@ export default function Message(props: TMessageProps) {
               </h2>
               <div className="flex flex-col gap-1">
                 <div className="flex max-w-full flex-grow flex-col gap-0">
-                  <ContentParts
-                    edit={edit}
-                    isLast={isLast}
-                    enterEdit={enterEdit}
-                    siblingIdx={siblingIdx}
-                    attachments={attachments}
-                    isSubmitting={isSubmitting}
-                    searchResults={searchResults}
-                    messageId={message.messageId}
-                    setSiblingIdx={setSiblingIdx}
-                    isCreatedByUser={message.isCreatedByUser}
-                    conversationId={conversation?.conversationId}
-                    isLatestMessage={messageId === latestMessage?.messageId}
-                    content={message.content as Array<TMessageContentParts | undefined>}
-                  />
+                  {shouldShowImagePlaceholder ? (
+                    <div className="w-full max-w-lg pt-1">
+                      <ImageGenerationPlaceholder progress={0.1} />
+                    </div>
+                  ) : (
+                    <ContentParts
+                      edit={edit}
+                      isLast={isLast}
+                      enterEdit={enterEdit}
+                      siblingIdx={siblingIdx}
+                      attachments={attachments}
+                      isSubmitting={isSubmitting}
+                      searchResults={searchResults}
+                      messageId={message.messageId}
+                      parentMessageId={message.parentMessageId}
+                      setSiblingIdx={setSiblingIdx}
+                      isCreatedByUser={message.isCreatedByUser}
+                      conversationId={conversation?.conversationId}
+                      isLatestMessage={messageId === latestMessage?.messageId}
+                      content={message.content as Array<TMessageContentParts | undefined>}
+                    />
+                  )}
                 </div>
                 {isLast && isSubmitting ? (
                   <div className="mt-1 h-[27px] bg-transparent" />
@@ -141,6 +155,7 @@ export default function Message(props: TMessageProps) {
                       setSiblingIdx={setSiblingIdx}
                     />
                     <HoverButtons
+                      attachments={attachments as TAttachment[] | undefined}
                       index={index}
                       isEditing={edit}
                       message={message}

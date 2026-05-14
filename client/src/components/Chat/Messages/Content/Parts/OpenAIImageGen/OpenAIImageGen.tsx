@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { PixelCard } from '@librechat/client';
 import type { TAttachment, TFile, TAttachmentMetadata } from 'librechat-data-provider';
 import Image from '~/components/Chat/Messages/Content/Image';
+import ImageGenerationPlaceholder from '~/components/Chat/Messages/Content/ImageGenerationPlaceholder';
 import ProgressText from './ProgressText';
 import { scaleImage } from '~/utils';
 
@@ -85,6 +85,9 @@ export default function OpenAIImageGen({
 
   const [dimensions, setDimensions] = useState({ width: 'auto', height: 'auto' });
   const containerRef = useRef<HTMLDivElement>(null);
+  const placeholderWidth = dimensions.width !== 'auto' ? dimensions.width : '100%';
+  const placeholderHeight = dimensions.height !== 'auto' ? dimensions.height : undefined;
+  const shouldShowPlaceholder = cancelled || progress < 1 || !filepath;
 
   const updateDimensions = useCallback(() => {
     if (origWidth && origHeight && containerRef.current) {
@@ -180,23 +183,23 @@ export default function OpenAIImageGen({
       </div>
       <div className="relative mb-2 flex w-full justify-start">
         <div ref={containerRef} className="w-full max-w-lg">
-          {dimensions.width !== 'auto' && progress < 1 && (
-            <PixelCard
-              variant="default"
+          {shouldShowPlaceholder ? (
+            <ImageGenerationPlaceholder
+              width={placeholderWidth}
+              height={placeholderHeight}
               progress={progress}
-              randomness={0.6}
-              width={dimensions.width}
-              height={dimensions.height}
+              error={cancelled}
+            />
+          ) : (
+            <Image
+              altText={filename}
+              imagePath={filepath ?? ''}
+              width={Number(dimensions.width?.split('px')[0])}
+              height={Number(dimensions.height?.split('px')[0])}
+              placeholderDimensions={{ width: dimensions.width, height: dimensions.height }}
+              args={parsedArgs}
             />
           )}
-          <Image
-            altText={filename}
-            imagePath={filepath ?? ''}
-            width={Number(dimensions.width?.split('px')[0])}
-            height={Number(dimensions.height?.split('px')[0])}
-            placeholderDimensions={{ width: dimensions.width, height: dimensions.height }}
-            args={parsedArgs}
-          />
         </div>
       </div>
     </>

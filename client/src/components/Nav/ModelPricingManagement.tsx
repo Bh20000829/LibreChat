@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react';
+import { useToastContext } from '@librechat/client';
 import { Search, BadgeDollarSign, Save, Plus, Trash2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TDialogProps } from '~/common';
@@ -44,6 +45,15 @@ const createEmptyRow = (): ModelPricingRow => ({
 });
 
 const decimalInputPattern = /^\d*\.?\d*$/;
+const CHAT_MODEL_PRICING_TITLE = 'chat模型计费管理';
+const MODEL_PRICING_HEADERS = [
+  '模型名称',
+  '输入单价（美元 / 100万 tokens）',
+  '缓存单价（美元 / 100万 tokens）',
+  '输出单价（美元 / 100万 tokens）',
+  '倍率',
+  '操作',
+];
 
 const parseNonNegativeDecimal = (value: string, fieldName: string) => {
   const normalized = value.trim() === '' ? '0' : value.trim();
@@ -56,6 +66,7 @@ const parseNonNegativeDecimal = (value: string, fieldName: string) => {
 
 export default function ModelPricingManagement({ open, onOpenChange }: TDialogProps) {
   const localize = useLocalize();
+  const { showToast } = useToastContext();
   const { token } = useAuthContext();
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<ModelPricingRow[]>([]);
@@ -113,6 +124,11 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
     },
     onSuccess: async () => {
       setStatusText(localize('com_model_pricing_save_success'));
+      showToast({
+        message: localize('com_model_pricing_save_success'),
+        status: 'success',
+        duration: 1600,
+      });
       await queryClient.invalidateQueries({ queryKey: ['model-pricing'] });
     },
     onError: (error: unknown) => {
@@ -145,6 +161,11 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
     },
     onSuccess: async () => {
       setStatusText(localize('com_ui_delete_success'));
+      showToast({
+        message: localize('com_ui_delete_success'),
+        status: 'success',
+        duration: 1600,
+      });
       await queryClient.invalidateQueries({ queryKey: ['model-pricing'] });
     },
     onError: (error: unknown) => {
@@ -188,6 +209,11 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
     if (!row.id) {
       setRows((prev) => prev.filter((_, i) => i !== rowIndex));
       setStatusText(localize('com_ui_delete_success'));
+      showToast({
+        message: localize('com_ui_delete_success'),
+        status: 'success',
+        duration: 1600,
+      });
       return;
     }
 
@@ -220,15 +246,16 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
           <div className="fixed inset-0 flex w-screen items-center justify-center p-4">
             <DialogPanel
               className={cn(
-                'w-full max-w-[88vw] xl:max-w-[84rem] overflow-hidden rounded-xl rounded-b-lg bg-background shadow-2xl backdrop-blur-2xl animate-in sm:rounded-2xl',
+                'w-full max-w-[96vw] overflow-hidden rounded-xl rounded-b-lg bg-background shadow-2xl backdrop-blur-2xl animate-in sm:rounded-2xl xl:max-w-[82rem]',
               )}
             >
-              <DialogTitle className="flex items-center justify-between border-b border-border-light px-6 py-4" as="div">
+              <DialogTitle
+                className="flex items-center justify-between border-b border-border-light px-6 py-4"
+                as="div"
+              >
                 <div className="flex items-center gap-2 text-text-primary">
                   <BadgeDollarSign className="h-5 w-5" />
-                  <h2 className="text-lg font-medium leading-6">
-                    {localize('com_nav_model_pricing_management')}
-                  </h2>
+                  <h2 className="text-lg font-medium leading-6">{CHAT_MODEL_PRICING_TITLE}</h2>
                 </div>
                 <button
                   type="button"
@@ -283,23 +310,41 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                   </div>
                 )}
 
-                <div className="max-h-[520px] overflow-auto rounded-lg border border-border-light">
-                  <table className="min-w-[1180px] divide-y divide-border-light text-sm">
+                {statusText ? (
+                  <div className="rounded-md border border-border-light bg-surface-secondary px-3 py-2 text-sm text-text-secondary">
+                    {statusText}
+                  </div>
+                ) : null}
+
+                <div className="max-h-[520px] overflow-y-auto rounded-lg border border-border-light">
+                  <table className="w-full table-fixed divide-y divide-border-light text-sm">
                     <thead className="bg-surface-secondary text-left text-text-secondary">
                       <tr>
-                        <th className="px-4 py-3 font-medium">{localize('com_model_pricing_model_name')}</th>
-                        <th className="px-4 py-3 font-medium">{localize('com_model_pricing_input_price')}</th>
-                        <th className="px-4 py-3 font-medium">缓存单价 (USD/1M Tokens)</th>
-                        <th className="px-4 py-3 font-medium">{localize('com_model_pricing_output_price')}</th>
-                        <th className="px-4 py-3 font-medium">{localize('com_model_pricing_multiplier')}</th>
-                        <th className="px-4 py-3 font-medium">{localize('com_user_mgmt_actions')}</th>
+                        <th className="w-[22%] px-3 py-3 font-medium">
+                          {MODEL_PRICING_HEADERS[0]}
+                        </th>
+                        <th className="w-[17%] px-3 py-3 font-medium">
+                          {MODEL_PRICING_HEADERS[1]}
+                        </th>
+                        <th className="w-[17%] px-3 py-3 font-medium">
+                          {MODEL_PRICING_HEADERS[2]}
+                        </th>
+                        <th className="w-[17%] px-3 py-3 font-medium">
+                          {MODEL_PRICING_HEADERS[3]}
+                        </th>
+                        <th className="w-[10%] px-3 py-3 font-medium">
+                          {MODEL_PRICING_HEADERS[4]}
+                        </th>
+                        <th className="w-[17%] px-3 py-3 font-medium">
+                          {MODEL_PRICING_HEADERS[5]}
+                        </th>
                       </tr>
                     </thead>
 
                     <tbody className="divide-y divide-border-light bg-background text-text-primary">
                       {pricingQuery.isLoading && (
                         <tr>
-                          <td className="px-4 py-8 text-center text-text-secondary" colSpan={6}>
+                          <td className="px-3 py-8 text-center text-text-secondary" colSpan={6}>
                             {localize('com_ui_loading')}
                           </td>
                         </tr>
@@ -307,7 +352,7 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
 
                       {!pricingQuery.isLoading && filteredRows.length === 0 && (
                         <tr>
-                          <td className="px-4 py-8 text-center text-text-secondary" colSpan={6}>
+                          <td className="px-3 py-8 text-center text-text-secondary" colSpan={6}>
                             {localize('com_model_pricing_no_rows')}
                           </td>
                         </tr>
@@ -316,15 +361,15 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                       {filteredRows.map(({ row, index: rowIndex }) => {
                         return (
                           <tr key={`${row.id ?? 'new'}-${row.modelName}-${rowIndex}`}>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-3">
                               <input
                                 type="text"
                                 value={row.modelName}
                                 onChange={(e) => updateRow(rowIndex, { modelName: e.target.value })}
-                                className="h-9 w-56 rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
+                                className="h-9 w-full rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
                               />
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-3">
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -336,10 +381,10 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                                   }
                                   updateRow(rowIndex, { inputPrice: nextValue });
                                 }}
-                                className="h-9 w-40 rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
+                                className="h-9 w-full rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
                               />
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-3">
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -351,10 +396,10 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                                   }
                                   updateRow(rowIndex, { cachePrice: nextValue });
                                 }}
-                                className="h-9 w-40 rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
+                                className="h-9 w-full rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
                               />
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-3">
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -366,10 +411,10 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                                   }
                                   updateRow(rowIndex, { outputPrice: nextValue });
                                 }}
-                                className="h-9 w-40 rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
+                                className="h-9 w-full rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
                               />
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-3">
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -381,11 +426,11 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                                   }
                                   updateRow(rowIndex, { multiplier: nextValue });
                                 }}
-                                className="h-9 w-32 rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
+                                className="h-9 w-full rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
                               />
                             </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
+                            <td className="px-3 py-3">
+                              <div className="flex items-center justify-start gap-1.5 whitespace-nowrap">
                                 <button
                                   type="button"
                                   onClick={() => handleSaveRow(row)}
@@ -394,10 +439,12 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                                     deleteRowMutation.isLoading ||
                                     busyRowKey === (row.id ?? `new:${row.modelName}`)
                                   }
-                                  className="inline-flex items-center gap-1 rounded-md bg-surface-tertiary px-2 py-1 text-xs text-text-primary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="inline-flex min-w-[64px] items-center justify-center gap-1 rounded-md bg-surface-tertiary px-2 py-1 text-xs text-text-primary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   <Save className="h-3.5 w-3.5" />
-                                  {row.id ? localize('com_user_mgmt_update') : localize('com_model_pricing_add')}
+                                  {row.id
+                                    ? localize('com_user_mgmt_update')
+                                    : localize('com_model_pricing_add')}
                                 </button>
                                 <button
                                   type="button"
@@ -407,7 +454,7 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                                     deleteRowMutation.isLoading ||
                                     busyRowKey === (row.id ?? `new:${row.modelName}`)
                                   }
-                                  className="inline-flex items-center gap-1 rounded-md border border-border-light px-2 py-1 text-xs text-text-primary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="inline-flex min-w-[64px] items-center justify-center gap-1 rounded-md border border-border-light px-2 py-1 text-xs text-text-primary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                   {localize('com_ui_delete')}
@@ -419,11 +466,6 @@ export default function ModelPricingManagement({ open, onOpenChange }: TDialogPr
                       })}
                     </tbody>
                   </table>
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg border border-border-light bg-surface-secondary px-4 py-3 text-sm">
-                  <span className="text-text-secondary">{statusText}</span>
-                  <span className="text-text-secondary text-xs">按行保存/删除生效</span>
                 </div>
               </div>
             </DialogPanel>

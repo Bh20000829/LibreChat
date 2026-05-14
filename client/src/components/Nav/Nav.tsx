@@ -23,6 +23,7 @@ import store from '~/store';
 const BookmarkNav = lazy(() => import('./Bookmarks/BookmarkNav'));
 const AccountSettings = lazy(() => import('./AccountSettings'));
 const AgentMarketplaceButton = lazy(() => import('./AgentMarketplaceButton'));
+const ImageFavorites = lazy(() => import('./ImageFavorites'));
 
 const NAV_WIDTH_DESKTOP = '260px';
 const NAV_WIDTH_MOBILE = '320px';
@@ -238,6 +239,11 @@ const Nav = memo(
                         isSearchLoading={isSearchLoading}
                       />
                     </div>
+                    {mode === 'image' && (
+                      <Suspense fallback={null}>
+                        <ImageFavorites />
+                      </Suspense>
+                    )}
                     <Suspense fallback={null}>
                       <AccountSettings />
                     </Suspense>

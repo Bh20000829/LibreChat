@@ -41,6 +41,7 @@ interface AttachFileMenuProps {
   endpoint?: string | null;
   disabled?: boolean | null;
   conversationId: string;
+  isImageMode?: boolean;
   endpointType?: EModelEndpoint;
   endpointFileConfig?: EndpointFileConfig;
 }
@@ -51,6 +52,7 @@ const AttachFileMenu = ({
   disabled,
   endpointType,
   conversationId,
+  isImageMode = false,
   endpointFileConfig,
 }: AttachFileMenuProps) => {
   const localize = useLocalize();
@@ -246,6 +248,7 @@ const AttachFileMenu = ({
     <>
       <FileUpload
         ref={inputRef}
+        multiple={!isImageMode}
         handleFileChange={(e) => {
           handleFileChange(e, toolResource);
         }}

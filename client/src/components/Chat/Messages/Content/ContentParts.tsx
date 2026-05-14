@@ -6,7 +6,7 @@ import type {
   TAttachment,
   Agents,
 } from 'librechat-data-provider';
-import { MessageContext, SearchContext } from '~/Providers';
+import { MessageContext, SearchContext, useMessagesOperations } from '~/Providers';
 import MemoryArtifacts from './MemoryArtifacts';
 import Sources from '~/components/Web/Sources';
 import { mapAttachments } from '~/utils/map';
@@ -16,6 +16,7 @@ import Part from './Part';
 type ContentPartsProps = {
   content: Array<TMessageContentParts | undefined> | undefined;
   messageId: string;
+  parentMessageId?: string | null;
   conversationId?: string | null;
   attachments?: TAttachment[];
   searchResults?: { [key: string]: SearchResultData };
@@ -36,6 +37,7 @@ const ContentParts = memo(
   ({
     content,
     messageId,
+    parentMessageId,
     conversationId,
     attachments,
     searchResults,
@@ -48,7 +50,47 @@ const ContentParts = memo(
     siblingIdx,
     setSiblingIdx,
   }: ContentPartsProps) => {
+    const { getMessages } = useMessagesOperations();
     const attachmentMap = useMemo(() => mapAttachments(attachments ?? []), [attachments]);
+    const imagePrompt = useMemo(() => {
+      const extractText = (parts: Array<TMessageContentParts | undefined> | undefined) => {
+        const prompt = (parts ?? [])
+          .map((part) => {
+            if (!part || part.type !== ContentTypes.TEXT) {
+              return '';
+            }
+
+            if (typeof part.text === 'string') {
+              return part.text;
+            }
+
+            return part.text?.value || '';
+          })
+          .join('\n')
+          .trim();
+
+        return prompt.length > 0 ? prompt : undefined;
+      };
+
+      const ownPrompt = extractText(content);
+      if (ownPrompt) {
+        return ownPrompt;
+      }
+
+      if (!parentMessageId) {
+        return undefined;
+      }
+
+      const parentMessage = getMessages()?.find((msg) => msg.messageId === parentMessageId);
+      const parentText = parentMessage?.text?.trim();
+      if (parentText) {
+        return parentText;
+      }
+
+      return extractText(
+        parentMessage?.content as Array<TMessageContentParts | undefined> | undefined,
+      );
+    }, [content, getMessages, parentMessageId]);
 
     const effectiveIsSubmitting = isLatestMessage ? isSubmitting : false;
 
@@ -125,6 +167,7 @@ const ContentParts = memo(
                 <Part
                   part={part}
                   attachments={partAttachments}
+                  imagePrompt={imagePrompt}
                   isSubmitting={effectiveIsSubmitting}
                   key={`part-${messageId}-${idx}`}
                   isCreatedByUser={isCreatedByUser}

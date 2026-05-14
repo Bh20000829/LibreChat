@@ -5,6 +5,7 @@ import {
 } from 'librechat-data-provider';
 import type { TConversation, TPreset } from 'librechat-data-provider';
 import { isEphemeralAgent } from '~/common';
+import { normalizeConversationMode } from './conversationMode';
 
 const allowedParams = Object.keys(tQueryParamsSchema.shape);
 export default function createChatSearchParams(
@@ -27,22 +28,25 @@ export default function createChatSearchParams(
 
   const conversation = input as TConversation | TPreset;
   const endpoint = conversation.endpoint;
+  const mode = normalizeConversationMode(conversation.mode);
   if (conversation.spec) {
-    return new URLSearchParams({ spec: conversation.spec });
+    return new URLSearchParams({ spec: conversation.spec, mode });
   }
   if (
     isAgentsEndpoint(endpoint) &&
     conversation.agent_id &&
     !isEphemeralAgent(conversation.agent_id)
   ) {
-    return new URLSearchParams({ agent_id: String(conversation.agent_id) });
+    return new URLSearchParams({ agent_id: String(conversation.agent_id), mode });
   } else if (isAssistantsEndpoint(endpoint) && conversation.assistant_id) {
-    return new URLSearchParams({ assistant_id: String(conversation.assistant_id) });
+    return new URLSearchParams({ assistant_id: String(conversation.assistant_id), mode });
   } else if (isAgentsEndpoint(endpoint) && !conversation.agent_id) {
     return params;
   } else if (isAssistantsEndpoint(endpoint) && !conversation.assistant_id) {
     return params;
   }
+
+  params.set('mode', mode);
 
   if (endpoint) {
     params.set('endpoint', endpoint);

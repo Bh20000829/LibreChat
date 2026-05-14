@@ -1,3 +1,5 @@
+const axios = require('axios');
+const FormData = require('form-data');
 const { logger } = require('@librechat/data-schemas');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { sleep, SplitStreamHandler, CustomOpenAIClient: OpenAI } = require('@librechat/agents');
@@ -860,6 +862,134 @@ class OpenAIClient extends BaseClient {
     });
 
     return response;
+  }
+
+  async editImage(params = {}, abortController = null) {
+    const startedAt = Date.now();
+    if (!abortController) {
+      abortController = new AbortController();
+    }
+
+    const {
+      prompt,
+      model,
+      imageFiles = [],
+      maskFile,
+      n = 1,
+      size = '1024x1024',
+      quality = 'auto',
+      background = 'auto',
+      input_fidelity,
+      output_format = 'png',
+      output_compression,
+      moderation,
+      user,
+    } = params;
+
+    if (!Array.isArray(imageFiles) || imageFiles.length === 0) {
+      throw new Error('At least one source image is required for image editing');
+    }
+
+    const baseURL = extractBaseURL(this.completionsUrl);
+    const formData = new FormData();
+
+    formData.append('model', model ?? this.modelOptions.model);
+    formData.append('prompt', prompt);
+    formData.append('n', Math.min(Math.max(Number(n) || 1, 1), 10).toString());
+    formData.append('size', size);
+    formData.append('quality', quality);
+    formData.append('background', background);
+    formData.append('output_format', output_format);
+
+    if (input_fidelity != null) {
+      formData.append('input_fidelity', input_fidelity);
+    }
+
+    if (moderation != null) {
+      formData.append('moderation', moderation);
+    }
+
+    if (user != null) {
+      formData.append('user', user);
+    }
+
+    if ((output_format === 'webp' || output_format === 'jpeg') && output_compression != null) {
+      formData.append('output_compression', String(output_compression));
+    }
+
+    for (const imageFile of imageFiles.slice(0, 16)) {
+      formData.append('image[]', imageFile.buffer, {
+        filename: imageFile.filename,
+        contentType: imageFile.type,
+      });
+    }
+
+    if (maskFile?.buffer) {
+      formData.append('mask', maskFile.buffer, {
+        filename: maskFile.filename,
+        contentType: maskFile.type,
+      });
+    }
+
+    const headers = {
+      ...formData.getHeaders(),
+      ...(this.useOpenRouter
+        ? {
+            'HTTP-Referer': 'https://librechat.ai',
+            'X-Title': 'LibreChat',
+          }
+        : {}),
+      ...(this.options.headers ?? {}),
+      Authorization: `Bearer ${this.apiKey}`,
+    };
+
+    if (process.env.OPENAI_ORGANIZATION) {
+      headers['OpenAI-Organization'] = process.env.OPENAI_ORGANIZATION;
+    }
+
+    /** @type {import('axios').AxiosRequestConfig} */
+    const axiosConfig = {
+      baseURL,
+      headers,
+      signal: abortController.signal,
+    };
+
+    if (this.options.defaultQuery) {
+      axiosConfig.params = this.options.defaultQuery;
+    }
+
+    if (this.options.proxy) {
+      axiosConfig.httpsAgent = new HttpsProxyAgent(this.options.proxy);
+    }
+
+    logger.info('[OpenAIClient] editImage request', {
+      url: `${baseURL}/images/edits`,
+      model: model ?? this.modelOptions.model,
+      prompt,
+      size,
+      quality,
+      imageCount: imageFiles.length,
+      hasMask: !!maskFile,
+    });
+
+    const response = await axios.post('/images/edits', formData, axiosConfig);
+
+    logger.info('[OpenAIClient] editImage response', {
+      url: `${baseURL}/images/edits`,
+      durationMs: Date.now() - startedAt,
+      created: response?.data?.created,
+      output_format: response?.data?.output_format,
+      usage: response?.data?.usage,
+      data: Array.isArray(response?.data?.data)
+        ? response.data.data.map((item) => ({
+            has_b64_json: typeof item?.b64_json === 'string' && item.b64_json.length > 0,
+            revised_prompt: item?.revised_prompt,
+            url: item?.url,
+          }))
+        : response?.data?.data,
+    });
+
+    return response.data;
   }
 
   async chatCompletion({ payload, onProgress, abortController = null }) {

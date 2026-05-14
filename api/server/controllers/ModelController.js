@@ -3,6 +3,16 @@ const { CacheKeys } = require('librechat-data-provider');
 const { loadDefaultModels, loadConfigModels } = require('~/server/services/Config');
 const { getLogStores } = require('~/cache');
 
+function filterEmptyImageProviders(modelConfig, mode) {
+  if (mode !== 'image' || !modelConfig || typeof modelConfig !== 'object') {
+    return modelConfig;
+  }
+
+  return Object.fromEntries(
+    Object.entries(modelConfig).filter(([, models]) => Array.isArray(models) && models.length > 0),
+  );
+}
+
 /**
  * @param {ServerRequest} req
  * @returns {Promise<TModelsConfig>} The models config.
@@ -35,7 +45,10 @@ async function loadModels(req) {
   const defaultModelsConfig = await loadDefaultModels(req);
   const customModelsConfig = await loadConfigModels(req);
 
-  const modelConfig = { ...defaultModelsConfig, ...customModelsConfig };
+  const modelConfig = filterEmptyImageProviders(
+    { ...defaultModelsConfig, ...customModelsConfig },
+    mode,
+  );
 
   await cache.set(cacheKey, modelConfig);
   return modelConfig;
@@ -51,4 +64,4 @@ async function modelController(req, res) {
   }
 }
 
-module.exports = { modelController, loadModels, getModelsConfig };
+module.exports = { modelController, loadModels, getModelsConfig, filterEmptyImageProviders };

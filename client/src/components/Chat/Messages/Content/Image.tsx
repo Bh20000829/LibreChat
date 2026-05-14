@@ -12,6 +12,7 @@ const Image = ({
   placeholderDimensions,
   className,
   args,
+  showPrompt = false,
 }: {
   imagePath: string;
   altText: string;
@@ -27,14 +28,26 @@ const Image = ({
     quality?: 'low' | 'medium' | 'high';
     size?: string;
     style?: string;
+    width?: number;
+    height?: number;
     [key: string]: unknown;
   };
+  showPrompt?: boolean;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleImageLoad = () => setIsLoaded(true);
+
+  const dialogArgs = useMemo(
+    () => ({
+      ...args,
+      width,
+      height,
+    }),
+    [args, height, width],
+  );
 
   const { width: scaledWidth, height: scaledHeight } = useMemo(
     () =>
@@ -76,7 +89,7 @@ const Image = ({
   };
 
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} className="space-y-2">
       <div
         className={cn(
           'relative mt-1 flex h-auto w-full max-w-lg items-center justify-center overflow-hidden rounded-lg border border-border-light text-text-secondary-alt shadow-md',
@@ -119,10 +132,15 @@ const Image = ({
             onOpenChange={setIsOpen}
             src={imagePath}
             downloadImage={downloadImage}
-            args={args}
+            args={dialogArgs}
           />
         )}
       </div>
+      {showPrompt && typeof args?.prompt === 'string' && args.prompt.trim().length > 0 && (
+        <div className="max-w-lg rounded-lg border border-border-light bg-surface-tertiary px-3 py-2 text-sm leading-relaxed text-text-primary">
+          {args.prompt}
+        </div>
+      )}
     </div>
   );
 };

@@ -144,6 +144,7 @@ const startServer = async () => {
   app.use('/api/quota', routes.quota);
   app.use('/api/model-pricing', routes.modelPricing);
   app.use('/api/user-management', routes.userManagement);
+  app.use('/api/image-favorites', routes.imageFavorites);
 
   app.use('/api/tags', routes.tags);
   app.use('/api/mcp', routes.mcp);

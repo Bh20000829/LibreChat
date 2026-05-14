@@ -39,6 +39,119 @@ const endpointPrefix =
 
 const settings = endpointSettings[EModelEndpoint.google];
 const EXCLUDED_GENAI_MODELS = /gemini-(?:1\.0|1-0|pro)/;
+const GOOGLE_IMAGE_ASPECT_RATIO_PATTERN = /^\d+:\d+$/;
+const GOOGLE_IMAGE_RESOLUTIONS = new Set(['512', '1K', '2K', '4K']);
+
+function getGoogleImageConfig(size) {
+  if (typeof size !== 'string') {
+    return undefined;
+  }
+
+  const normalizedSize = size.trim();
+  if (!normalizedSize) {
+    return undefined;
+  }
+
+  if (GOOGLE_IMAGE_ASPECT_RATIO_PATTERN.test(normalizedSize)) {
+    return {
+      aspectRatio: normalizedSize,
+    };
+  }
+
+  const normalizedResolution = normalizedSize.toUpperCase();
+  if (GOOGLE_IMAGE_RESOLUTIONS.has(normalizedResolution)) {
+    return {
+      imageSize: normalizedResolution,
+    };
+  }
+
+  return undefined;
+}
+
+function buildGoogleImageRequest({ prompt, imageFiles, generationConfig, promptPrefix }) {
+  const parts = [{ text: prompt.trim() }];
+  for (const imageFile of imageFiles) {
+    if (!imageFile?.buffer || !imageFile?.type?.startsWith('image/')) {
+      continue;
+    }
+
+    parts.push({
+      inlineData: {
+        mimeType: imageFile.type,
+        data: imageFile.buffer.toString('base64'),
+      },
+    });
+  }
+
+  const requestOptions = {
+    contents: [{ role: 'user', parts }],
+    generationConfig,
+  };
+
+  if (promptPrefix.length) {
+    requestOptions.systemInstruction = {
+      role: 'system',
+      parts: [{ text: promptPrefix }],
+    };
+  }
+
+  return requestOptions;
+}
+
+function shouldRetryWithoutImageConfig(errorText) {
+  if (typeof errorText !== 'string' || errorText.length === 0) {
+    return false;
+  }
+
+  return /imageconfig|unknown name .*imageconfig|unknown field .*imageconfig|cannot find field .*imageconfig/i.test(
+    errorText,
+  );
+}
+
+function normalizeChatContent(content) {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+
+        if (typeof part?.text === 'string') {
+          return part.text;
+        }
+
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  if (content == null) {
+    return '';
+  }
+
+  return JSON.stringify(content);
+}
+
+function mapChatPayloadToGoogleContents(payload = []) {
+  return payload
+    .map((message) => {
+      const text = normalizeChatContent(message?.content).trim();
+      if (!text) {
+        return null;
+      }
+
+      return {
+        role: message?.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text }],
+      };
+    })
+    .filter(Boolean);
+}
 
 class GoogleClient extends BaseClient {
   constructor(credentials, options = {}) {
@@ -798,6 +911,101 @@ class GoogleClient extends BaseClient {
     return this.usage;
   }
 
+  async generateImage(params = {}, abortController = null) {
+    if (!abortController) {
+      abortController = new AbortController();
+    }
+
+    const { prompt, model, imageFiles = [], n = 1, size: _size } = params;
+
+    if (!prompt?.trim()) {
+      throw new Error('Prompt is required for Google image generation');
+    }
+
+    const modelName = model ?? this.modelOptions.model ?? '';
+    const generationConfig = {
+      ...googleGenConfigSchema.parse(this.modelOptions),
+      candidateCount: Math.min(Math.max(Number(n) || 1, 1), 1),
+      responseModalities: ['Image'],
+    };
+
+    const promptPrefix = (this.systemMessage ?? '').trim();
+    const imageConfig = getGoogleImageConfig(_size);
+    if (imageConfig) {
+      generationConfig.imageConfig = imageConfig;
+    }
+
+    let requestOptions = buildGoogleImageRequest({
+      prompt,
+      imageFiles,
+      generationConfig,
+      promptPrefix,
+    });
+
+    const headers = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+
+    if (this.authHeader) {
+      headers.Authorization = `Bearer ${this.apiKey}`;
+    } else if (this.apiKey) {
+      headers['x-goog-api-key'] = this.apiKey;
+    }
+
+    const baseUrl = (this.reverseProxyUrl || 'https://generativelanguage.googleapis.com').replace(
+      /\/$/,
+      '',
+    );
+    let response = await this.fetch(`${baseUrl}/v1beta/models/${modelName}:generateContent`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestOptions),
+      signal: abortController.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      if (imageConfig && shouldRetryWithoutImageConfig(errorText)) {
+        logger.warn('[GoogleClient] Retrying image generation without imageConfig', {
+          model: modelName,
+          size: _size,
+          reverseProxyUrl: this.reverseProxyUrl,
+        });
+
+        delete generationConfig.imageConfig;
+        requestOptions = buildGoogleImageRequest({
+          prompt,
+          imageFiles,
+          generationConfig,
+          promptPrefix,
+        });
+
+        response = await this.fetch(`${baseUrl}/v1beta/models/${modelName}:generateContent`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestOptions),
+          signal: abortController.signal,
+        });
+      } else {
+        throw new Error(
+          `[GoogleGenerativeAI Error]: Error fetching from ${baseUrl}/v1beta/models/${modelName}:generateContent: ` +
+            `[${response.status} ${response.statusText}] ${errorText}`,
+        );
+      }
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `[GoogleGenerativeAI Error]: Error fetching from ${baseUrl}/v1beta/models/${modelName}:generateContent: ` +
+          `[${response.status} ${response.statusText}] ${errorText}`,
+      );
+    }
+
+    return await response.json();
+  }
+
   getMessageMapMethod() {
     /**
      * @param {TMessage} msg
@@ -910,6 +1118,86 @@ class GoogleClient extends BaseClient {
       reply = titleResponse.content;
       return reply;
     }
+  }
+
+  async chatCompletion({ payload, onProgress, abortController = null }) {
+    if (!abortController) {
+      abortController = new AbortController();
+    }
+
+    const model =
+      this.options.titleModel ?? this.modelOptions.modelName ?? this.modelOptions.model ?? '';
+    const safetySettings = getSafetySettings(model);
+    const contents = mapChatPayloadToGoogleContents(payload);
+
+    if (contents.length === 0) {
+      return '';
+    }
+
+    if (!EXCLUDED_GENAI_MODELS.test(model) && !this.project_id) {
+      /** @type {GenerativeModel} */
+      const client = this.client ?? this.initializeClient();
+      const requestOptions = {
+        contents,
+        safetySettings,
+        generationConfig: {
+          ...googleGenConfigSchema.parse(this.modelOptions),
+        },
+      };
+
+      const promptPrefix = (this.systemMessage ?? '').trim();
+      if (promptPrefix.length) {
+        requestOptions.systemInstruction = {
+          parts: [{ text: promptPrefix }],
+        };
+      }
+
+      const result = await client.generateContent(requestOptions, {
+        signal: abortController.signal,
+      });
+
+      return result.response?.text?.() ?? '';
+    }
+
+    const messages = payload
+      .map((message) => {
+        const text = normalizeChatContent(message?.content).trim();
+        if (!text) {
+          return null;
+        }
+
+        if (message?.role === 'system') {
+          return new SystemMessage(text);
+        }
+
+        return new HumanMessage(text);
+      })
+      .filter(Boolean);
+
+    if (messages.length === 0) {
+      return '';
+    }
+
+    const titleResponse = await this.client.invoke(messages, {
+      signal: abortController.signal,
+      timeout: 7000,
+      safetySettings,
+    });
+
+    if (titleResponse.usage_metadata) {
+      await this.recordTokenUsage({
+        model,
+        promptTokens: titleResponse.usage_metadata.input_tokens,
+        completionTokens: titleResponse.usage_metadata.output_tokens,
+        context: 'title',
+      });
+    }
+
+    if (typeof onProgress === 'function' && titleResponse.content) {
+      onProgress(titleResponse.content);
+    }
+
+    return titleResponse.content ?? '';
   }
 
   async titleConvo({ text, responseText = '' }) {

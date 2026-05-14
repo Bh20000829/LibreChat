@@ -26,10 +26,19 @@ type PartProps = {
   showCursor: boolean;
   isCreatedByUser: boolean;
   attachments?: TAttachment[];
+  imagePrompt?: string;
 };
 
 const Part = memo(
-  ({ part, isSubmitting, attachments, isLast, showCursor, isCreatedByUser }: PartProps) => {
+  ({
+    part,
+    isSubmitting,
+    attachments,
+    isLast,
+    showCursor,
+    isCreatedByUser,
+    imagePrompt,
+  }: PartProps) => {
     if (!part) {
       return null;
     }
@@ -211,11 +220,12 @@ const Part = memo(
             height: height + 'px',
             width: width + 'px',
           }}
+          args={{ prompt: imagePrompt }}
         />
       );
     } else if (part.type === ContentTypes.IMAGE_URL) {
       const imageUrl =
-        typeof part.image_url === 'string' ? part.image_url : part.image_url?.url ?? '';
+        typeof part.image_url === 'string' ? part.image_url : (part.image_url?.url ?? '');
 
       if (!imageUrl) {
         return null;
@@ -231,6 +241,7 @@ const Part = memo(
             height: '1024px',
             width: '1024px',
           }}
+          args={{ prompt: imagePrompt }}
         />
       );
     }

@@ -11,7 +11,9 @@ import type { Pluggable } from 'unified';
 import { Citation, CompositeCitation, HighlightedText } from '~/components/Web/Citation';
 import { Artifact, artifactPlugin } from '~/components/Artifacts/Artifact';
 import { ArtifactProvider, CodeBlockProvider } from '~/Providers';
+import { useChatContext } from '~/Providers';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
+import ImageGenerationPlaceholder from './ImageGenerationPlaceholder';
 import { langSubset, preprocessLaTeX } from '~/utils';
 import { unicodeCitation } from '~/components/Web';
 import { code, a, p } from './MarkdownComponents';
@@ -55,8 +57,10 @@ const processTableContent = (content: React.ReactNode): React.ReactNode => {
 // --- 新增代码结束 ---
 
 const Markdown = memo(({ content = '', isLatestMessage }: TContentProps) => {
+  const { conversation } = useChatContext();
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isInitializing = content === '';
+  const isImageModeInitializing = isInitializing && conversation?.mode === 'image';
 
   const currentContent = useMemo(() => {
     if (isInitializing) {
@@ -88,6 +92,10 @@ const Markdown = memo(({ content = '', isLatestMessage }: TContentProps) => {
     [remarkMath, { singleDollarTextMath: false }],
     unicodeCitation,
   ];
+
+  if (isImageModeInitializing) {
+    return <ImageGenerationPlaceholder progress={0.1} className="max-w-lg" />;
+  }
 
   if (isInitializing) {
     return (

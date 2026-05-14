@@ -4,15 +4,17 @@ import { TooltipAnchor, Button, NewChatIcon } from '@librechat/client';
 import { useChatContext } from '~/Providers';
 import { clearMessagesCache } from '~/utils';
 import { useLocalize } from '~/hooks';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 
 export default function HeaderNewChat() {
   const localize = useLocalize();
   const queryClient = useQueryClient();
   const { conversation, newConversation } = useChatContext();
+  const { mode } = useConversationMode();
 
   const clickHandler: React.MouseEventHandler<HTMLButtonElement> = (e) => {
     if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
-      window.open('/c/new', '_blank');
+      window.open(`/c/new?mode=${mode}`, '_blank');
       return;
     }
     clearMessagesCache(queryClient, conversation?.conversationId);

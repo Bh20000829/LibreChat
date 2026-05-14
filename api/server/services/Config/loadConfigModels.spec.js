@@ -1,9 +1,46 @@
+jest.mock('@librechat/api', () => ({
+  isUserProvided: (value) => value === 'user_provided',
+}));
+
+jest.mock(
+  'librechat-data-provider',
+  () => ({
+    EModelEndpoint: {
+      azureOpenAI: 'azureOpenAI',
+      gptPlugins: 'gptPlugins',
+      azureAssistants: 'azureAssistants',
+      custom: 'custom',
+    },
+    extractEnvVariable: (value) => {
+      if (typeof value !== 'string') {
+        return value;
+      }
+
+      const match = value.match(/^\$\{(.+)\}$/);
+      return match ? (process.env[match[1]] ?? value) : value;
+    },
+    normalizeEndpointName: (value) => {
+      if (typeof value !== 'string') {
+        return value;
+      }
+
+      return value.toLowerCase() === 'ollama' ? 'ollama' : value;
+    },
+  }),
+  { virtual: true },
+);
+
+jest.mock('~/server/services/ModelService', () => ({
+  fetchModels: jest.fn(),
+}));
+
+jest.mock('./app', () => ({
+  getAppConfig: jest.fn(),
+}));
+
 const { fetchModels } = require('~/server/services/ModelService');
 const loadConfigModels = require('./loadConfigModels');
 const { getAppConfig } = require('./app');
-
-jest.mock('~/server/services/ModelService');
-jest.mock('./app');
 
 const exampleConfig = {
   endpoints: {
@@ -61,6 +98,7 @@ const exampleConfig = {
 
 describe('loadConfigModels', () => {
   const mockRequest = { user: { id: 'testUserId' } };
+  const imageModeRequest = { user: { id: 'testUserId' }, query: { mode: 'image' } };
 
   const originalEnv = process.env;
 
@@ -396,5 +434,14 @@ describe('loadConfigModels', () => {
         name: 'OLLaMA',
       }),
     );
+  });
+
+  it('excludes custom endpoints from image mode', async () => {
+    getAppConfig.mockResolvedValue(exampleConfig);
+
+    const result = await loadConfigModels(imageModeRequest);
+
+    expect(result).toEqual({});
+    expect(fetchModels).not.toHaveBeenCalled();
   });
 });

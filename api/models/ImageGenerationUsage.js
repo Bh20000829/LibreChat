@@ -58,7 +58,7 @@ const imageGenerationUsageSchema = new mongoose.Schema(
     input_tokens_details: {
       type: mongoose.Schema.Types.Mixed,
     },
-    output_toknes_details: {
+    output_tokens_details: {
       type: mongoose.Schema.Types.Mixed,
     },
   },

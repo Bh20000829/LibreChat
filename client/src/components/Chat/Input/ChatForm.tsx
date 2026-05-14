@@ -110,8 +110,8 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
     [conversation?.conversationId],
   );
   const imageModeEnabled = useMemo(
-    () => conversation?.mode === 'image' && conversation?.endpoint === EModelEndpoint.openAI,
-    [conversation?.mode, conversation?.endpoint],
+    () => conversation?.mode === 'image',
+    [conversation?.mode],
   );
 
   const isRTL = useMemo(
@@ -175,6 +175,7 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
   });
   const {
     isNotAppendable,
+    placeholderText,
     handlePaste,
     handleKeyDown,
     handleCompositionStart,
@@ -316,6 +317,7 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
                   }}
                   onBlur={setIsTextAreaFocused.bind(null, false)}
                   aria-label={localize('com_ui_message_input')}
+                  placeholder={placeholderText}
                   onClick={handleFocusOrClick}
                   style={{ height: 44, overflowY: 'auto' }}
                   className={cn(

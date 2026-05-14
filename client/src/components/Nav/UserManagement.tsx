@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react';
+import { useToastContext } from '@librechat/client';
 import { Search, Users, Plus, Save, Trash2, Eye, EyeOff } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TDialogProps } from '~/common';
@@ -41,6 +42,7 @@ const getUsers = async (token?: string): Promise<UsersResponse> => {
 
 export default function UserManagement({ open, onOpenChange }: TDialogProps) {
   const localize = useLocalize();
+  const { showToast } = useToastContext();
   const { token } = useAuthContext();
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<ManagedUser[]>([]);
@@ -114,10 +116,17 @@ export default function UserManagement({ open, onOpenChange }: TDialogProps) {
       } else {
         setStatusText(localize('com_user_mgmt_create_success'));
       }
+      showToast({
+        message: localize('com_user_mgmt_create_success'),
+        status: 'success',
+        duration: 1600,
+      });
       await queryClient.invalidateQueries({ queryKey: ['managed-users'] });
     },
     onError: (error: unknown) => {
-      setStatusText(error instanceof Error ? error.message : localize('com_user_mgmt_operation_failed'));
+      setStatusText(
+        error instanceof Error ? error.message : localize('com_user_mgmt_operation_failed'),
+      );
     },
   });
 
@@ -147,10 +156,17 @@ export default function UserManagement({ open, onOpenChange }: TDialogProps) {
     },
     onSuccess: async () => {
       setStatusText(localize('com_user_mgmt_update_success'));
+      showToast({
+        message: localize('com_user_mgmt_update_success'),
+        status: 'success',
+        duration: 1600,
+      });
       await queryClient.invalidateQueries({ queryKey: ['managed-users'] });
     },
     onError: (error: unknown) => {
-      setStatusText(error instanceof Error ? error.message : localize('com_user_mgmt_operation_failed'));
+      setStatusText(
+        error instanceof Error ? error.message : localize('com_user_mgmt_operation_failed'),
+      );
     },
   });
 
@@ -167,10 +183,17 @@ export default function UserManagement({ open, onOpenChange }: TDialogProps) {
     },
     onSuccess: async () => {
       setStatusText(localize('com_user_mgmt_delete_success'));
+      showToast({
+        message: localize('com_user_mgmt_delete_success'),
+        status: 'success',
+        duration: 1600,
+      });
       await queryClient.invalidateQueries({ queryKey: ['managed-users'] });
     },
     onError: (error: unknown) => {
-      setStatusText(error instanceof Error ? error.message : localize('com_user_mgmt_operation_failed'));
+      setStatusText(
+        error instanceof Error ? error.message : localize('com_user_mgmt_operation_failed'),
+      );
     },
   });
 
@@ -199,13 +222,18 @@ export default function UserManagement({ open, onOpenChange }: TDialogProps) {
           <div className="fixed inset-0 flex w-screen items-center justify-center p-4">
             <DialogPanel
               className={cn(
-                'w-full max-w-[98vw] xl:max-w-[92rem] overflow-hidden rounded-xl rounded-b-lg bg-background shadow-2xl backdrop-blur-2xl animate-in sm:rounded-2xl',
+                'w-full max-w-[98vw] overflow-hidden rounded-xl rounded-b-lg bg-background shadow-2xl backdrop-blur-2xl animate-in sm:rounded-2xl xl:max-w-[92rem]',
               )}
             >
-              <DialogTitle className="flex items-center justify-between border-b border-border-light px-6 py-4" as="div">
+              <DialogTitle
+                className="flex items-center justify-between border-b border-border-light px-6 py-4"
+                as="div"
+              >
                 <div className="flex items-center gap-2 text-text-primary">
                   <Users className="h-5 w-5" />
-                  <h2 className="text-lg font-medium leading-6">{localize('com_nav_user_management')}</h2>
+                  <h2 className="text-lg font-medium leading-6">
+                    {localize('com_nav_user_management')}
+                  </h2>
                 </div>
                 <button
                   type="button"
@@ -266,10 +294,18 @@ export default function UserManagement({ open, onOpenChange }: TDialogProps) {
                       <tr>
                         <th className="px-4 py-3 font-medium">{localize('com_quota_user')}</th>
                         <th className="px-4 py-3 font-medium">{localize('com_user_mgmt_email')}</th>
-                        <th className="px-4 py-3 font-medium">{localize('com_user_mgmt_group_type')}</th>
-                        <th className="px-4 py-3 font-medium">{localize('com_user_mgmt_provider_api_key')}</th>
-                        <th className="px-4 py-3 font-medium">{localize('com_user_mgmt_password')}</th>
-                        <th className="px-4 py-3 font-medium">{localize('com_user_mgmt_actions')}</th>
+                        <th className="px-4 py-3 font-medium">
+                          {localize('com_user_mgmt_group_type')}
+                        </th>
+                        <th className="px-4 py-3 font-medium">
+                          {localize('com_user_mgmt_provider_api_key')}
+                        </th>
+                        <th className="px-4 py-3 font-medium">
+                          {localize('com_user_mgmt_password')}
+                        </th>
+                        <th className="px-4 py-3 font-medium">
+                          {localize('com_user_mgmt_actions')}
+                        </th>
                       </tr>
                     </thead>
 
@@ -317,7 +353,9 @@ export default function UserManagement({ open, onOpenChange }: TDialogProps) {
                                 value={row.groupType == null ? '' : String(row.groupType)}
                                 onChange={(e) => {
                                   const value = e.target.value;
-                                  updateRow(index, { groupType: value === '' ? null : Number(value) });
+                                  updateRow(index, {
+                                    groupType: value === '' ? null : Number(value),
+                                  });
                                 }}
                                 className="h-9 w-24 rounded-md border border-border-light bg-surface-primary px-2 text-sm outline-none focus:border-border-xheavy"
                               >
@@ -331,7 +369,9 @@ export default function UserManagement({ open, onOpenChange }: TDialogProps) {
                               <input
                                 type="text"
                                 value={row.providerApiKey ?? ''}
-                                onChange={(e) => updateRow(index, { providerApiKey: e.target.value })}
+                                onChange={(e) =>
+                                  updateRow(index, { providerApiKey: e.target.value })
+                                }
                                 className="h-9 w-64 rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
                               />
                             </td>
@@ -358,7 +398,11 @@ export default function UserManagement({ open, onOpenChange }: TDialogProps) {
                                   }
                                   className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
                                 >
-                                  {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                  {visible ? (
+                                    <EyeOff className="h-4 w-4" />
+                                  ) : (
+                                    <Eye className="h-4 w-4" />
+                                  )}
                                 </button>
                               </div>
                             </td>
@@ -369,7 +413,9 @@ export default function UserManagement({ open, onOpenChange }: TDialogProps) {
                                   onClick={() => {
                                     if (isNew) {
                                       if (!row.password || row.password.trim().length < 8) {
-                                        setStatusText(localize('com_user_mgmt_password_required_message'));
+                                        setStatusText(
+                                          localize('com_user_mgmt_password_required_message'),
+                                        );
                                         return;
                                       }
                                       createMutation.mutate(row);
@@ -391,7 +437,9 @@ export default function UserManagement({ open, onOpenChange }: TDialogProps) {
                                       if (!row.id) {
                                         return;
                                       }
-                                      if (!window.confirm(localize('com_user_mgmt_delete_confirm'))) {
+                                      if (
+                                        !window.confirm(localize('com_user_mgmt_delete_confirm'))
+                                      ) {
                                         return;
                                       }
                                       deleteMutation.mutate(row.id);
