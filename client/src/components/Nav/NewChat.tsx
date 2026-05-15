@@ -38,7 +38,7 @@ export default function NewChat({
       }
       clearMessagesCache(queryClient, conversation?.conversationId);
       queryClient.invalidateQueries([QueryKeys.messages]);
-      newConvo();
+      newConvo({ template: { mode } });
       navigate(`/c/new?mode=${mode}`, { state: { focusChat: true } });
       if (isSmallScreen) {
         toggleNav();

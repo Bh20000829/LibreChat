@@ -5,6 +5,7 @@ import { QueryKeys, Constants } from 'librechat-data-provider';
 import type { TMessage } from 'librechat-data-provider';
 import type { Dispatch, SetStateAction } from 'react';
 import { useLocalize, useNewConvo } from '~/hooks';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 import { clearMessagesCache } from '~/utils';
 import store from '~/store';
 
@@ -16,6 +17,7 @@ export default function MobileNav({
   const localize = useLocalize();
   const queryClient = useQueryClient();
   const { newConversation } = useNewConvo();
+  const { mode } = useConversationMode();
   const conversation = useRecoilValue(store.conversationByIndex(0));
   const { title = 'New Chat' } = conversation || {};
 
@@ -60,7 +62,7 @@ export default function MobileNav({
         onClick={() => {
           clearMessagesCache(queryClient, conversation?.conversationId);
           queryClient.invalidateQueries([QueryKeys.messages]);
-          newConversation();
+          newConversation({ template: { mode } });
         }}
       >
         <svg

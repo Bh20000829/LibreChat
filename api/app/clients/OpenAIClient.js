@@ -629,6 +629,22 @@ class OpenAIClient extends BaseClient {
         [this.outputTokensKey]: outputTokens,
       };
     }
+
+    if (
+      this.usage &&
+      typeof this.usage === 'object' &&
+      typeof this.usage.reasoning_tokens === 'number' &&
+      typeof this.usage[this.outputTokensKey] === 'number'
+    ) {
+      return {
+        ...this.usage,
+        [this.outputTokensKey]: Math.max(
+          0,
+          this.usage[this.outputTokensKey] - this.usage.reasoning_tokens,
+        ),
+      };
+    }
+
     return this.usage;
   }
 
@@ -676,6 +692,7 @@ class OpenAIClient extends BaseClient {
         context,
         model: this.modelOptions.model,
         conversationId: this.conversationId,
+        responseMessageId: this.responseMessageId,
         user: this.user ?? this.options.req.user?.id,
         endpointTokenConfig: this.options.endpointTokenConfig,
       },
@@ -693,6 +710,7 @@ class OpenAIClient extends BaseClient {
           context: 'reasoning',
           model: this.modelOptions.model,
           conversationId: this.conversationId,
+          responseMessageId: this.responseMessageId,
           user: this.user ?? this.options.req.user?.id,
           endpointTokenConfig: this.options.endpointTokenConfig,
         },

@@ -2,7 +2,6 @@ const { logger } = require('@librechat/data-schemas');
 const { ViolationTypes } = require('librechat-data-provider');
 const { createAutoRefillTransaction } = require('./Transaction');
 const { logViolation } = require('~/cache');
-const { estimateRequestCostCny } = require('~/models/pricingUtils');
 const { Balance } = require('~/db/models');
 const { ensureQuotaRecord, getNextResetBizDate } = require('~/models/quotaUsage');
 
@@ -23,15 +22,7 @@ const checkBalanceRecord = async function ({
   amount,
   endpointTokenConfig,
 }) {
-  const tokenCost = await estimateRequestCostCny({
-    tokenType,
-    amount,
-    model,
-    endpoint,
-    valueKey,
-    endpointTokenConfig,
-  });
-  const normalizedTokenCost = Math.max(0, Number(tokenCost) || 0);
+  const normalizedTokenCost = 0;
 
   const quotaState = await ensureQuotaRecord(user);
 
@@ -42,7 +33,7 @@ const checkBalanceRecord = async function ({
     const nextResetDate = getNextResetBizDate(quotaState);
 
     return {
-      canSpend: remaining >= normalizedTokenCost,
+      canSpend: remaining > 0,
       balance: remaining,
       tokenCost: normalizedTokenCost,
       dailyQuota: cycleQuota,
@@ -80,8 +71,7 @@ const checkBalanceRecord = async function ({
     endpointTokenConfig: !!endpointTokenConfig,
   });
 
-  // Only perform auto-refill if spending would bring the balance to 0 or below
-  if (balance - tokenCost <= 0 && record.autoRefillEnabled && record.refillAmount > 0) {
+  if (balance <= 0 && record.autoRefillEnabled && record.refillAmount > 0) {
     const lastRefillDate = new Date(record.lastRefill);
     const now = new Date();
     if (
@@ -106,7 +96,7 @@ const checkBalanceRecord = async function ({
 
   logger.debug('[Balance.check] Token cost', { tokenCost });
   return {
-    canSpend: balance >= normalizedTokenCost,
+    canSpend: balance > 0,
     balance,
     tokenCost: normalizedTokenCost,
   };

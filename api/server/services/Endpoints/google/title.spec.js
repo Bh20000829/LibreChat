@@ -38,6 +38,7 @@ const { saveConvo } = require('~/models');
 describe('google/addTitle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    delete process.env.GOOGLE_IMAGE_TITLE_MODEL_MAP;
   });
 
   test('normalizes verbose Google title output before saving', async () => {
@@ -113,6 +114,150 @@ Steaming Minimalist: A Matte Black Study`),
         endpointOption: expect.objectContaining({
           modelOptions: expect.objectContaining({
             model: 'gemini-3.1-pro-preview',
+          }),
+        }),
+      }),
+    );
+  });
+
+  test('uses the first chat model from the matching spec group in image mode', async () => {
+    initializeClient.mockResolvedValue({
+      client: {
+        chatCompletion: jest.fn().mockResolvedValue('Blue Future Car'),
+      },
+    });
+
+    const req = {
+      user: { id: 'user-1' },
+      config: {
+        endpoints: {
+          google: {},
+        },
+        modelSpecs: {
+          list: [
+            {
+              name: 'google-image-flash',
+              group: 'google-flash',
+              preset: {
+                endpoint: 'google',
+                mode: 'image',
+                model: 'gemini-2.5-flash-image-preview',
+              },
+            },
+            {
+              name: 'google-chat-flash',
+              group: 'google-flash',
+              preset: {
+                endpoint: 'google',
+                mode: 'chat',
+                model: 'gemini-2.5-flash',
+              },
+            },
+            {
+              name: 'google-chat-pro',
+              group: 'google-pro',
+              preset: {
+                endpoint: 'google',
+                mode: 'chat',
+                model: 'gemini-3.1-pro-preview',
+              },
+            },
+          ],
+        },
+      },
+      body: {
+        mode: 'image',
+        spec: 'google-image-flash',
+      },
+    };
+    const response = {
+      conversationId: 'convo-2b',
+      text: '',
+    };
+    const client = {
+      options: {
+        spec: 'google-image-flash',
+        modelOptions: { model: 'gemini-2.5-flash-image-preview', mode: 'image' },
+      },
+    };
+
+    await addTitle(req, { text: '画一辆蓝色未来汽车', response, client });
+
+    expect(initializeClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpointOption: expect.objectContaining({
+          modelOptions: expect.objectContaining({
+            model: 'gemini-2.5-flash',
+          }),
+        }),
+      }),
+    );
+  });
+
+  test('uses fixed title model mapping by image type in image mode', async () => {
+    process.env.GOOGLE_IMAGE_TITLE_MODEL_MAP = JSON.stringify({
+      'google-flash': 'gemini-2.5-flash',
+      default: 'gemini-2.0-flash',
+    });
+
+    initializeClient.mockResolvedValue({
+      client: {
+        chatCompletion: jest.fn().mockResolvedValue('Blue Future Car'),
+      },
+    });
+
+    const req = {
+      user: { id: 'user-1' },
+      config: {
+        endpoints: {
+          google: {},
+        },
+        modelSpecs: {
+          list: [
+            {
+              name: 'google-image-flash',
+              group: 'google-flash',
+              preset: {
+                endpoint: 'google',
+                mode: 'image',
+                model: 'gemini-2.5-flash-image',
+              },
+            },
+            {
+              name: 'google-chat-pro',
+              group: 'google-pro',
+              preset: {
+                endpoint: 'google',
+                mode: 'chat',
+                model: 'gemini-3.1-pro-preview',
+              },
+            },
+          ],
+        },
+      },
+      body: {
+        mode: 'image',
+        spec: 'google-image-flash',
+      },
+    };
+    const response = {
+      conversationId: 'convo-2c',
+      text: '',
+    };
+    const client = {
+      options: {
+        spec: 'google-image-flash',
+        modelOptions: { model: 'gemini-2.5-flash-image', mode: 'image' },
+      },
+    };
+
+    await addTitle(req, { text: '画一辆蓝色未来汽车', response, client });
+
+    expect(initializeClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpointOption: expect.objectContaining({
+          modelOptions: expect.objectContaining({
+            model: 'gemini-2.5-flash',
           }),
         }),
       }),

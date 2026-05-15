@@ -28,6 +28,7 @@ const keys = require('./keys');
 const user = require('./user');
 const quota = require('./quota');
 const modelPricing = require('./modelPricing');
+const imageModelPricing = require('./imageModelPricing');
 const userManagement = require('./userManagement');
 const mcp = require('./mcp');
 const imageFavorites = require('./imageFavorites');
@@ -43,6 +44,7 @@ module.exports = {
   tags,
   quota,
   modelPricing,
+  imageModelPricing,
   roles,
   oauth,
   files,

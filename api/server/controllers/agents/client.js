@@ -199,6 +199,12 @@ class AgentClient extends BaseClient {
     this.processMemory;
     /** @type {Record<number, string> | null} */
     this.agentIdMap = null;
+    /**
+     * True once message-context usage has already been persisted via collected usage,
+     * so BaseClient fallback accounting does not record the same response twice.
+     * @type {boolean}
+     */
+    this.hasRecordedMessageUsage = false;
   }
 
   /**
@@ -701,6 +707,11 @@ class AgentClient extends BaseClient {
     if (!collectedUsage || !collectedUsage.length) {
       return;
     }
+
+    if (context === 'message') {
+      this.hasRecordedMessageUsage = true;
+    }
+
     const input_tokens =
       (collectedUsage[0]?.input_tokens || 0) +
       (Number(collectedUsage[0]?.input_token_details?.cache_creation) || 0) +
@@ -1242,6 +1253,10 @@ class AgentClient extends BaseClient {
     completionTokens,
     context = 'message',
   }) {
+    if (context === 'message' && this.hasRecordedMessageUsage) {
+      return;
+    }
+
     try {
       await spendTokens(
         {

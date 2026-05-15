@@ -10,11 +10,13 @@ import {
 } from '@librechat/client';
 import { clearAllConversationStorage } from '~/utils';
 import { useLocalize, useNewConvo } from '~/hooks';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 
 export const ClearChats = () => {
   const localize = useLocalize();
   const [open, setOpen] = useState(false);
   const { newConversation } = useNewConvo();
+  const { mode } = useConversationMode();
   const clearConvosMutation = useClearConversationsMutation();
 
   const clearConvos = () => {
@@ -23,7 +25,7 @@ export const ClearChats = () => {
       {
         onSuccess: () => {
           clearAllConversationStorage();
-          newConversation();
+          newConversation({ template: { mode } });
         },
       },
     );

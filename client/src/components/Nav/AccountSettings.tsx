@@ -12,6 +12,7 @@ import { useLocalize } from '~/hooks';
 import Settings from './Settings';
 import QuotaManagement from './QuotaManagement';
 import ModelPricingManagement from './ModelPricingManagement';
+import ImageModelPricingManagement from './ImageModelPricingManagement';
 import UserManagement from './UserManagement';
 import store from '~/store';
 
@@ -36,6 +37,7 @@ function AccountSettings() {
   const [showSettings, setShowSettings] = useState(false);
   const [showQuotaManagement, setShowQuotaManagement] = useState(false);
   const [showModelPricingManagement, setShowModelPricingManagement] = useState(false);
+  const [showImageModelPricingManagement, setShowImageModelPricingManagement] = useState(false);
   const [showUserManagement, setShowUserManagement] = useState(false);
   const [showFiles, setShowFiles] = useRecoilState(store.showFiles);
 
@@ -137,6 +139,14 @@ function AccountSettings() {
               <BadgeDollarSign className="icon-md" aria-hidden="true" />
               {localize('com_nav_model_pricing_management')}
             </Select.SelectItem>
+            <Select.SelectItem
+              value=""
+              onClick={() => setShowImageModelPricingManagement(true)}
+              className="select-item pl-8 text-sm"
+            >
+              <BadgeDollarSign className="icon-md" aria-hidden="true" />
+              {localize('com_nav_image_model_pricing_management')}
+            </Select.SelectItem>
           </>
         )}
         <DropdownMenuSeparator />
@@ -159,6 +169,12 @@ function AccountSettings() {
         <ModelPricingManagement
           open={showModelPricingManagement}
           onOpenChange={setShowModelPricingManagement}
+        />
+      )}
+      {showImageModelPricingManagement && (
+        <ImageModelPricingManagement
+          open={showImageModelPricingManagement}
+          onOpenChange={setShowImageModelPricingManagement}
         />
       )}
       {showUserManagement && (

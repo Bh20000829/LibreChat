@@ -1,4 +1,5 @@
 const ModelPricing = require('~/models/ModelPricing');
+const ImageModelPricing = require('~/models/ImageModelPricing');
 const { getMultiplier, getCacheMultiplier } = require('./tx');
 
 const TOKENS_PER_MILLION = 1000000;
@@ -95,6 +96,76 @@ const calculateUsageCostCny = async ({
   return roundMoney(usageUsd * usdToCnyRate);
 };
 
+const getImageModalityTokens = (details) => {
+  if (!details || typeof details !== 'object') {
+    return 0;
+  }
+
+  const imageTokens = Number(details.image ?? details.images ?? 0);
+  return Number.isFinite(imageTokens) && imageTokens > 0 ? Math.floor(imageTokens) : 0;
+};
+
+const getImageEffectivePricing = async ({ model }) => {
+  const modelName = typeof model === 'string' ? model.trim() : '';
+  if (!modelName) {
+    return null;
+  }
+
+  const custom = await ImageModelPricing.findOne({ modelName })
+    .select('textInputPrice cachePrice textOutputPrice imageInputPrice imageOutputPrice multiplier')
+    .lean();
+
+  if (!custom) {
+    return null;
+  }
+
+  return {
+    textInputPriceUsdPer1M: safeNumber(custom.textInputPrice),
+    cachePriceUsdPer1M: safeNumber(custom.cachePrice),
+    textOutputPriceUsdPer1M: safeNumber(custom.textOutputPrice),
+    imageInputPriceUsdPer1M: safeNumber(custom.imageInputPrice),
+    imageOutputPriceUsdPer1M: safeNumber(custom.imageOutputPrice),
+    multiplier: Math.max(safeNumber(custom.multiplier), 0),
+  };
+};
+
+const calculateImageUsageCostCny = async ({ usage = {}, model, endpoint, valueKey, endpointTokenConfig }) => {
+  const inputTokens = Math.max(0, Math.floor(safeNumber(usage.input_tokens)));
+  const outputTokens = Math.max(0, Math.floor(safeNumber(usage.output_tokens)));
+  const cacheTokens = Math.max(0, Math.floor(safeNumber(usage.cached_content_tokens)));
+
+  const inputImageTokens = getImageModalityTokens(usage.input_token_modality_details);
+  const outputImageTokens = getImageModalityTokens(usage.output_token_modality_details);
+
+  const inputTextTokens = Math.max(0, inputTokens - inputImageTokens);
+  const outputTextTokens = Math.max(0, outputTokens - outputImageTokens);
+
+  const imagePricing = await getImageEffectivePricing({ model });
+  if (!imagePricing) {
+    return calculateUsageCostCny({
+      inputTokens,
+      outputTokens,
+      cacheTokens,
+      model,
+      endpoint,
+      valueKey,
+      endpointTokenConfig,
+    });
+  }
+
+  const usdToCnyRate = getUsdToCnyRate();
+  const usageUsd =
+    ((inputTextTokens * imagePricing.textInputPriceUsdPer1M +
+      cacheTokens * imagePricing.cachePriceUsdPer1M +
+      outputTextTokens * imagePricing.textOutputPriceUsdPer1M +
+      inputImageTokens * imagePricing.imageInputPriceUsdPer1M +
+      outputImageTokens * imagePricing.imageOutputPriceUsdPer1M) /
+      TOKENS_PER_MILLION) *
+    imagePricing.multiplier;
+
+  return roundMoney(usageUsd * usdToCnyRate);
+};
+
 const estimateRequestCostCny = async ({
   tokenType = 'prompt',
   amount = 0,
@@ -119,5 +190,6 @@ const estimateRequestCostCny = async ({
 module.exports = {
   getUsdToCnyRate,
   calculateUsageCostCny,
+  calculateImageUsageCostCny,
   estimateRequestCostCny,
 };

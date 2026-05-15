@@ -218,7 +218,34 @@ class AnthropicClient extends BaseClient {
   getStreamUsage() {
     const inputUsage = this.message_start?.message?.usage ?? {};
     const outputUsage = this.message_delta?.usage ?? {};
-    return Object.assign({}, inputUsage, outputUsage);
+    // Keep input-side fields sourced from `message_start` whenever available.
+    // Some stream `message_delta.usage` payloads can include cumulative fields that
+    // would otherwise overwrite input usage and inflate prompt accounting.
+    const input_tokens =
+      typeof inputUsage.input_tokens === 'number'
+        ? inputUsage.input_tokens
+        : outputUsage.input_tokens;
+    const cache_creation_input_tokens =
+      typeof inputUsage.cache_creation_input_tokens === 'number'
+        ? inputUsage.cache_creation_input_tokens
+        : outputUsage.cache_creation_input_tokens;
+    const cache_read_input_tokens =
+      typeof inputUsage.cache_read_input_tokens === 'number'
+        ? inputUsage.cache_read_input_tokens
+        : outputUsage.cache_read_input_tokens;
+    const output_tokens =
+      typeof outputUsage.output_tokens === 'number'
+        ? outputUsage.output_tokens
+        : inputUsage.output_tokens;
+
+    return {
+      ...inputUsage,
+      ...outputUsage,
+      input_tokens,
+      cache_creation_input_tokens,
+      cache_read_input_tokens,
+      output_tokens,
+    };
   }
 
   /**
@@ -332,6 +359,7 @@ class AnthropicClient extends BaseClient {
           context,
           user: this.user,
           conversationId: this.conversationId,
+          responseMessageId: this.responseMessageId,
           model: model ?? this.modelOptions.model,
           endpointTokenConfig: this.options.endpointTokenConfig,
         },
@@ -349,6 +377,7 @@ class AnthropicClient extends BaseClient {
         context,
         user: this.user,
         conversationId: this.conversationId,
+        responseMessageId: this.responseMessageId,
         model: model ?? this.modelOptions.model,
         endpointTokenConfig: this.options.endpointTokenConfig,
       },
@@ -964,21 +993,37 @@ class AnthropicClient extends BaseClient {
           requestOptions,
           true,
         );
-        let promptTokens = response?.usage?.input_tokens;
-        let completionTokens = response?.usage?.output_tokens;
-        if (!promptTokens) {
-          promptTokens = this.getTokenCountForMessage(titleMessage);
-          promptTokens += this.getTokenCountForMessage({ role: 'system', content: system });
+        const strictProviderUsage =
+          String(process.env.STRICT_PROVIDER_USAGE || '').toLowerCase() === 'true';
+        const usagePromptTokens = response?.usage?.input_tokens;
+        const usageCompletionTokens = response?.usage?.output_tokens;
+
+        if (strictProviderUsage && (usagePromptTokens == null || usageCompletionTokens == null)) {
+          logger.warn(
+            '[AnthropicClient] STRICT_PROVIDER_USAGE enabled: skipping title token recording due to missing provider usage',
+            {
+              model,
+              conversationId: this.conversationId,
+              responseMessageId: this.responseMessageId,
+            },
+          );
+        } else {
+          let promptTokens = usagePromptTokens;
+          let completionTokens = usageCompletionTokens;
+          if (!promptTokens) {
+            promptTokens = this.getTokenCountForMessage(titleMessage);
+            promptTokens += this.getTokenCountForMessage({ role: 'system', content: system });
+          }
+          if (!completionTokens) {
+            completionTokens = this.getTokenCountForMessage(response.content[0]);
+          }
+          await this.recordTokenUsage({
+            model,
+            promptTokens,
+            completionTokens,
+            context: 'title',
+          });
         }
-        if (!completionTokens) {
-          completionTokens = this.getTokenCountForMessage(response.content[0]);
-        }
-        await this.recordTokenUsage({
-          model,
-          promptTokens,
-          completionTokens,
-          context: 'title',
-        });
         const text = response.content[0].text;
         title = parseParamFromPrompt(text, 'title');
       } catch (e) {

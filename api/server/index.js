@@ -143,6 +143,7 @@ const startServer = async () => {
   app.use('/api/permissions', routes.accessPermissions);
   app.use('/api/quota', routes.quota);
   app.use('/api/model-pricing', routes.modelPricing);
+  app.use('/api/image-model-pricing', routes.imageModelPricing);
   app.use('/api/user-management', routes.userManagement);
   app.use('/api/image-favorites', routes.imageFavorites);
 

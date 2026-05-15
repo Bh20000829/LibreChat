@@ -745,6 +745,7 @@ class BaseClient {
       this.getTokenCountForResponse &&
       this.getTokenCount
     ) {
+      const strictProviderUsage = String(process.env.STRICT_PROVIDER_USAGE || '').toLowerCase() === 'true';
       let completionTokens;
 
       /**
@@ -753,8 +754,21 @@ class BaseClient {
        * use the legacy token estimations.
        * @type {StreamUsage | null} */
       const usage = this.getStreamUsage != null ? this.getStreamUsage() : null;
+      const usagePromptTokens =
+        usage != null && Number(usage[this.inputTokensKey]) > 0
+          ? Number(usage[this.inputTokensKey])
+          : promptTokens;
 
-      if (usage != null && Number(usage[this.outputTokensKey]) > 0) {
+      const hasProviderOutputUsage = usage != null && Number(usage[this.outputTokensKey]) > 0;
+
+      if (strictProviderUsage && !hasProviderOutputUsage) {
+        logger.warn('[BaseClient] STRICT_PROVIDER_USAGE enabled: skipping token recording due to missing provider output usage', {
+          endpoint: this.options.endpoint,
+          model: responseMessage.model,
+          conversationId: this.conversationId,
+          responseMessageId: this.responseMessageId,
+        });
+      } else if (hasProviderOutputUsage) {
         responseMessage.tokenCount = usage[this.outputTokensKey];
         completionTokens = responseMessage.tokenCount;
         await this.updateUserMessageTokenCount({
@@ -766,7 +780,7 @@ class BaseClient {
         });
         await this.recordTokenUsage({
           usage,
-          promptTokens,
+          promptTokens: usagePromptTokens,
           completionTokens,
           balance: balanceConfig,
           model: responseMessage.model,
@@ -776,7 +790,7 @@ class BaseClient {
         completionTokens = responseMessage.tokenCount;
         await this.recordTokenUsage({
           usage,
-          promptTokens,
+          promptTokens: usagePromptTokens,
           completionTokens,
           balance: balanceConfig,
           model: responseMessage.model,

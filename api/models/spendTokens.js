@@ -2,6 +2,60 @@ const { logger } = require('@librechat/data-schemas');
 const { createTransaction, createStructuredTransaction } = require('./Transaction');
 const { incrementQuotaUsage } = require('./quotaUsage');
 const { calculateUsageCostCny } = require('./pricingUtils');
+
+const usageDeduplicationWindowMs = 5 * 60 * 1000;
+const recentUsageKeys = new Map();
+
+const buildUsageDeduplicationKey = (txData, tokenUsage) => {
+  if (!txData?.responseMessageId) {
+    return null;
+  }
+
+  const promptPart =
+    tokenUsage?.promptTokens != null && typeof tokenUsage.promptTokens === 'object'
+      ? JSON.stringify(tokenUsage.promptTokens)
+      : String(tokenUsage?.promptTokens ?? '');
+  const completionPart = String(tokenUsage?.completionTokens ?? '');
+  const cachePart = String(tokenUsage?.cacheTokens ?? '');
+
+  return [
+    String(txData.user ?? ''),
+    String(txData.conversationId ?? ''),
+    String(txData.context ?? 'message'),
+    String(txData.responseMessageId),
+    promptPart,
+    completionPart,
+    cachePart,
+  ].join(':');
+};
+
+const shouldSkipDuplicateUsage = (txData, tokenUsage) => {
+  const dedupeKey = buildUsageDeduplicationKey(txData, tokenUsage);
+  if (!dedupeKey) {
+    return false;
+  }
+
+  const now = Date.now();
+  for (const [key, timestamp] of recentUsageKeys.entries()) {
+    if (now - timestamp > usageDeduplicationWindowMs) {
+      recentUsageKeys.delete(key);
+    }
+  }
+
+  const existingTimestamp = recentUsageKeys.get(dedupeKey);
+  if (existingTimestamp != null && now - existingTimestamp <= usageDeduplicationWindowMs) {
+    logger.warn('[spendTokens] Skipping duplicate usage record', {
+      user: txData.user,
+      conversationId: txData.conversationId,
+      context: txData.context,
+      responseMessageId: txData.responseMessageId,
+    });
+    return true;
+  }
+
+  recentUsageKeys.set(dedupeKey, now);
+  return false;
+};
 /**
  * Creates up to two transactions to record the spending of tokens.
  *
@@ -15,6 +69,10 @@ const { calculateUsageCostCny } = require('./pricingUtils');
  * @throws {Error} - Throws an error if there's an issue creating the transactions.
  */
 const spendTokens = async (txData, tokenUsage) => {
+  if (shouldSkipDuplicateUsage(txData, tokenUsage)) {
+    return;
+  }
+
   const { promptTokens, completionTokens, cacheTokens } = tokenUsage;
   logger.debug(
     `[spendTokens] conversationId: ${txData.conversationId}${
@@ -99,6 +157,10 @@ const spendTokens = async (txData, tokenUsage) => {
  * @throws {Error} - Throws an error if there's an issue creating the transactions.
  */
 const spendStructuredTokens = async (txData, tokenUsage) => {
+  if (shouldSkipDuplicateUsage(txData, tokenUsage)) {
+    return { prompt: undefined, completion: undefined };
+  }
+
   const { promptTokens, completionTokens } = tokenUsage;
   logger.debug(
     `[spendStructuredTokens] conversationId: ${txData.conversationId}${

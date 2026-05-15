@@ -26,6 +26,7 @@ import {
   useSetIndexOptions,
 } from '~/hooks';
 import { mainTextareaId, BadgeItem } from '~/common';
+import useConversationMode from '~/hooks/Conversations/useConversationMode';
 import AttachFileChat from './Files/AttachFileChat';
 import FileFormChat from './Files/FileFormChat';
 import { cn, removeFocusRings } from '~/utils';
@@ -57,6 +58,7 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
   useFocusChatEffect(textAreaRef);
   const localize = useLocalize();
   const { setOption } = useSetIndexOptions();
+  const { mode } = useConversationMode(index);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [, setIsScrollable] = useState(false);
@@ -110,8 +112,8 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
     [conversation?.conversationId],
   );
   const imageModeEnabled = useMemo(
-    () => conversation?.mode === 'image',
-    [conversation?.mode],
+    () => mode === 'image',
+    [mode],
   );
 
   const isRTL = useMemo(

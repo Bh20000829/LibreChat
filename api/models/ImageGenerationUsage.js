@@ -52,6 +52,18 @@ const imageGenerationUsageSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    cached_content_tokens: {
+      type: Number,
+      default: 0,
+    },
+    tool_use_prompt_tokens: {
+      type: Number,
+      default: 0,
+    },
+    thoughts_tokens: {
+      type: Number,
+      default: 0,
+    },
     size: {
       type: String,
     },
@@ -59,6 +71,21 @@ const imageGenerationUsageSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
     },
     output_tokens_details: {
+      type: mongoose.Schema.Types.Mixed,
+    },
+    input_token_modality_details: {
+      type: mongoose.Schema.Types.Mixed,
+    },
+    cache_token_modality_details: {
+      type: mongoose.Schema.Types.Mixed,
+    },
+    output_token_modality_details: {
+      type: mongoose.Schema.Types.Mixed,
+    },
+    tool_use_prompt_token_modality_details: {
+      type: mongoose.Schema.Types.Mixed,
+    },
+    provider_usage_metadata: {
       type: mongoose.Schema.Types.Mixed,
     },
   },

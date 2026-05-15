@@ -1065,6 +1065,7 @@ class GoogleClient extends BaseClient {
         context,
         user: this.user ?? this.options.req?.user?.id,
         conversationId: this.conversationId,
+        responseMessageId: this.responseMessageId,
         model: model ?? this.modelOptions.model,
         endpointTokenConfig: this.options.endpointTokenConfig,
       },
@@ -1107,12 +1108,11 @@ class GoogleClient extends BaseClient {
       });
 
       if (titleResponse.usage_metadata) {
-        await this.recordTokenUsage({
-          model,
-          promptTokens: titleResponse.usage_metadata.input_tokens,
-          completionTokens: titleResponse.usage_metadata.output_tokens,
-          context: 'title',
-        });
+        this.usage = {
+          input_tokens: titleResponse.usage_metadata.input_tokens,
+          output_tokens: titleResponse.usage_metadata.output_tokens,
+          ...titleResponse.usage_metadata,
+        };
       }
 
       reply = titleResponse.content;
@@ -1156,6 +1156,23 @@ class GoogleClient extends BaseClient {
         signal: abortController.signal,
       });
 
+      const usageMetadata = result?.response?.usageMetadata ?? result?.response?.usage_metadata;
+      if (usageMetadata) {
+        this.usage = {
+          input_tokens:
+            usageMetadata.promptTokenCount ??
+            usageMetadata.input_tokens ??
+            usageMetadata.prompt_token_count ??
+            0,
+          output_tokens:
+            usageMetadata.candidatesTokenCount ??
+            usageMetadata.output_tokens ??
+            usageMetadata.candidates_token_count ??
+            0,
+          ...usageMetadata,
+        };
+      }
+
       return result.response?.text?.() ?? '';
     }
 
@@ -1185,12 +1202,11 @@ class GoogleClient extends BaseClient {
     });
 
     if (titleResponse.usage_metadata) {
-      await this.recordTokenUsage({
-        model,
-        promptTokens: titleResponse.usage_metadata.input_tokens,
-        completionTokens: titleResponse.usage_metadata.output_tokens,
-        context: 'title',
-      });
+      this.usage = {
+        input_tokens: titleResponse.usage_metadata.input_tokens,
+        output_tokens: titleResponse.usage_metadata.output_tokens,
+        ...titleResponse.usage_metadata,
+      };
     }
 
     if (typeof onProgress === 'function' && titleResponse.content) {
