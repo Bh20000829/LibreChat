@@ -35,7 +35,7 @@ dist/
 public/main.js
 public/main.js.map
 public/main.js.LICENSE.txt
-images/
+/images/
 client/public/images/
 client/public/main.js
 client/public/main.js.map
