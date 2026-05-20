@@ -305,9 +305,15 @@ const getProviderKeyForUserGroup = async ({ user, providerEnvPrefix }) => {
  * @param {Object} options.user - req.user
  * @param {string} options.providerEnvPrefix - 环境变量前缀，例如 OPENAI_API_KEY
  * @param {string | undefined | null} options.defaultApiKey - 默认环境变量 key
+ * @param {boolean} [options.useUserProviderApiKey=true] - Whether to prioritize user-level providerApiKey.
  * @returns {Promise<{apiKey: string | undefined | null, source: 'user' | 'group' | 'default', groupType?: number | null, envKey?: string | null}>}
  */
-const resolveProviderApiKeyForUser = async ({ user, providerEnvPrefix, defaultApiKey }) => {
+const resolveProviderApiKeyForUser = async ({
+  user,
+  providerEnvPrefix,
+  defaultApiKey,
+  useUserProviderApiKey = true,
+}) => {
   if (!user) {
     return {
       apiKey: defaultApiKey,
@@ -329,7 +335,7 @@ const resolveProviderApiKeyForUser = async ({ user, providerEnvPrefix, defaultAp
 
   const { providerApiKey, groupType } = await getUserKeyRoutingWithCache(userId);
 
-  if (providerApiKey) {
+  if (useUserProviderApiKey && providerApiKey) {
     return {
       apiKey: providerApiKey,
       source: 'user',

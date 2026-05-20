@@ -5,9 +5,19 @@ const { getUserKey, checkUserKeyExpiry } = require('~/server/services/UserServic
 const { GoogleClient } = require('~/app');
 const { resolveProviderApiKeyForUser } = require('~/server/services/UserService');
 
-const initializeClient = async ({ req, res, endpointOption, overrideModel, optionsOnly }) => {
+const initializeClient = async ({
+  req,
+  res,
+  endpointOption,
+  overrideModel,
+  optionsOnly,
+  providerEnvPrefix,
+  useUserProviderApiKey,
+}) => {
   const { GOOGLE_KEY, GOOGLE_REVERSE_PROXY, GOOGLE_AUTH_HEADER, PROXY } = process.env;
-  const isUserProvided = GOOGLE_KEY === 'user_provided';
+  const selectedProviderEnvPrefix = providerEnvPrefix ?? 'GOOGLE_KEY';
+  const prefixedDefaultGoogleKey = process.env[selectedProviderEnvPrefix];
+  const isUserProvided = (prefixedDefaultGoogleKey ?? GOOGLE_KEY) === 'user_provided';
   const { key: expiresAt } = req.body;
 
   let userKey = null;
@@ -18,9 +28,11 @@ const initializeClient = async ({ req, res, endpointOption, overrideModel, optio
 
   let serviceKey = {};
 
-  /** Check if GOOGLE_KEY is provided at all (including 'user_provided') */
+  let effectiveGoogleKey = prefixedDefaultGoogleKey ?? GOOGLE_KEY;
+
+  /** Check if a google key is provided at all (including 'user_provided') */
   const isGoogleKeyProvided =
-    (GOOGLE_KEY && GOOGLE_KEY.trim() !== '') || (isUserProvided && userKey != null);
+    (effectiveGoogleKey && effectiveGoogleKey.trim() !== '') || (isUserProvided && userKey != null);
 
   if (!isGoogleKeyProvided) {
     /** Only attempt to load service key if GOOGLE_KEY is not provided */
@@ -38,20 +50,19 @@ const initializeClient = async ({ req, res, endpointOption, overrideModel, optio
     }
   }
 
-  let effectiveGoogleKey = GOOGLE_KEY;
-
   if (!isUserProvided && req.user) {
     const routing = await resolveProviderApiKeyForUser({
       user: req.user,
-      providerEnvPrefix: 'GOOGLE_KEY',
-      defaultApiKey: GOOGLE_KEY,
+      providerEnvPrefix: selectedProviderEnvPrefix,
+      defaultApiKey: effectiveGoogleKey,
+      useUserProviderApiKey,
     });
 
     effectiveGoogleKey = routing.apiKey;
 
     if (routing.source !== 'default') {
       console.log(
-        `===============[GOOGLE_KEY] User: ${req.user.id || req.user._id}, ` +
+        `===============[${selectedProviderEnvPrefix}] User: ${req.user.id || req.user._id}, ` +
           `Source: ${routing.source}, Type: ${routing.groupType ?? 'N/A'}, Env: ${routing.envKey ?? 'N/A'}`,
       );
     }

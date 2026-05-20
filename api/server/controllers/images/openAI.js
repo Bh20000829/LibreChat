@@ -54,6 +54,23 @@ function getInitializeClient(endpoint) {
   return initializeOpenAIClient;
 }
 
+function resolveImageReverseProxy(endpoint) {
+  const generic = process.env.IMAGE_REVERSE_PROXY?.trim();
+  if (endpoint === EModelEndpoint.google) {
+    return process.env.GOOGLE_IMAGE_REVERSE_PROXY?.trim() || generic || null;
+  }
+
+  return process.env.OPENAI_IMAGE_REVERSE_PROXY?.trim() || generic || null;
+}
+
+function resolveImageProviderKeyPrefix(endpoint) {
+  if (endpoint === EModelEndpoint.google) {
+    return 'GOOGLE_IMAGE_KEY';
+  }
+
+  return 'OPENAI_IMAGE_API_KEY';
+}
+
 function splitOverrideId(rawId) {
   if (!rawId || typeof rawId !== 'string') {
     return { id: null, skipSave: false };
@@ -591,11 +608,18 @@ async function generateOpenAIImage(req, res) {
     const sourceImages = await resolveSourceImages(req, req.body.files);
     const operationType = sourceImages.length > 0 ? 'edit' : 'generation';
     const initializeClient = getInitializeClient(endpoint);
+    const imageReverseProxyUrl = resolveImageReverseProxy(endpoint);
+    const imageProviderEnvPrefix = resolveImageProviderKeyPrefix(endpoint);
+    const imageEndpointOption = imageReverseProxyUrl
+      ? { ...endpointOption, reverseProxyUrl: imageReverseProxyUrl }
+      : endpointOption;
     const { client } = await initializeClient({
       req,
       res,
-      endpointOption,
+      endpointOption: imageEndpointOption,
       overrideModel: resolvedModel,
+      providerEnvPrefix: imageProviderEnvPrefix,
+      useUserProviderApiKey: false,
     });
 
     const imageRequest = {
@@ -748,14 +772,12 @@ async function generateOpenAIImage(req, res) {
 
     const normalizedUsage = normalizeImageUsage(normalizedResult?.usage);
     const size = resolvedImageSize;
-    let imageCostCny = 0;
-    if (normalizedUsage != null) {
-      imageCostCny = await calculateImageUsageCostCny({
-        usage: normalizedUsage,
-        model: resolvedModel,
-        endpoint,
-      });
-    }
+    const imageCostCny = await calculateImageUsageCostCny({
+      usage: normalizedUsage ?? {},
+      model: resolvedModel,
+      endpoint,
+      generatedCount: assets.length,
+    });
     const providerResponse = createProviderResponse({
       created: normalizedResult?.created,
       outputFormat,
@@ -804,11 +826,11 @@ async function generateOpenAIImage(req, res) {
       });
     }
 
-    if (normalizedUsage != null) {
+    if (normalizedUsage != null || imageCostCny > 0) {
       await incrementQuotaUsage(req.user.id, {
-        inputTokens: normalizedUsage.input_tokens,
-        outputTokens: normalizedUsage.output_tokens,
-        cacheTokens: normalizedUsage.cached_content_tokens,
+        inputTokens: normalizedUsage?.input_tokens ?? 0,
+        outputTokens: normalizedUsage?.output_tokens ?? 0,
+        cacheTokens: normalizedUsage?.cached_content_tokens ?? 0,
         costCny: imageCostCny,
       });
     }

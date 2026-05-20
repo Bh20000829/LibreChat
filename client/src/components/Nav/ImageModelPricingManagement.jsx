@@ -22,8 +22,10 @@ const getImageModelPricing = async (token) => {
   return response.json();
 };
 
-const createEmptyRow = () => ({
+const createEmptyRow = (billingMode) => ({
   modelName: '',
+  billingMode,
+  requestPrice: '0',
   textInputPrice: '0',
   cachePrice: '0',
   textOutputPrice: '0',
@@ -34,7 +36,7 @@ const createEmptyRow = () => ({
 
 const decimalInputPattern = /^\d*\.?\d*$/;
 const IMAGE_MODEL_PRICING_TITLE = 'image模型计费管理';
-const MODEL_PRICING_HEADERS = [
+const TOKEN_HEADERS = [
   '模型名称',
   '文本输入单价（美元 / 100万 tokens）',
   '缓存单价（美元 / 100万 tokens）',
@@ -44,9 +46,10 @@ const MODEL_PRICING_HEADERS = [
   '倍率',
   '操作',
 ];
+const REQUEST_HEADERS = ['模型名称', '按次单价（人民币 / 次）', '倍率', '操作'];
 
 const parseNonNegativeDecimal = (value, fieldName) => {
-  const normalized = value.trim() === '' ? '0' : value.trim();
+  const normalized = String(value ?? '').trim() === '' ? '0' : String(value).trim();
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed) || parsed < 0) {
     throw new Error(`${fieldName} must be a non-negative number`);
@@ -63,6 +66,7 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
   const [query, setQuery] = useState('');
   const [statusText, setStatusText] = useState('');
   const [busyRowKey, setBusyRowKey] = useState(null);
+  const [billingMode, setBillingMode] = useState('token');
 
   const pricingQuery = useQuery({
     queryKey: ['image-model-pricing'],
@@ -72,19 +76,28 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
   });
 
   useEffect(() => {
-    if (pricingQuery.data?.records) {
-      setRows(
-        pricingQuery.data.records.map((row) => ({
-          ...row,
-          textInputPrice: String(row.textInputPrice ?? 0),
-          cachePrice: String(row.cachePrice ?? 0),
-          textOutputPrice: String(row.textOutputPrice ?? 0),
-          imageInputPrice: String(row.imageInputPrice ?? 0),
-          imageOutputPrice: String(row.imageOutputPrice ?? 0),
-          multiplier: String(row.multiplier ?? 1),
-        })),
-      );
+    if (!pricingQuery.data?.records) {
+      return;
     }
+
+    const mappedRows = pricingQuery.data.records.map((row) => ({
+      ...row,
+      billingMode: row.billingMode === 'request' ? 'request' : 'token',
+      requestPrice: String(row.requestPrice ?? 0),
+      textInputPrice: String(row.textInputPrice ?? 0),
+      cachePrice: String(row.cachePrice ?? 0),
+      textOutputPrice: String(row.textOutputPrice ?? 0),
+      imageInputPrice: String(row.imageInputPrice ?? 0),
+      imageOutputPrice: String(row.imageOutputPrice ?? 0),
+      multiplier: String(row.multiplier ?? 1),
+    }));
+
+    const inferredMode = mappedRows.some((row) => row.billingMode === 'request')
+      ? 'request'
+      : 'token';
+
+    setBillingMode(inferredMode);
+    setRows(mappedRows.map((row) => ({ ...row, billingMode: inferredMode })));
   }, [pricingQuery.data]);
 
   const saveRowMutation = useMutation({
@@ -100,6 +113,8 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
         },
         body: JSON.stringify({
           modelName: row.modelName.trim(),
+          billingMode,
+          requestPrice: parseNonNegativeDecimal(row.requestPrice ?? '0', 'requestPrice'),
           textInputPrice: parseNonNegativeDecimal(row.textInputPrice, 'textInputPrice'),
           cachePrice: parseNonNegativeDecimal(row.cachePrice, 'cachePrice'),
           textOutputPrice: parseNonNegativeDecimal(row.textOutputPrice, 'textOutputPrice'),
@@ -189,6 +204,11 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...updates } : row)));
   };
 
+  const handleModeChange = (nextMode) => {
+    setBillingMode(nextMode);
+    setRows((prev) => prev.map((row) => ({ ...row, billingMode: nextMode })));
+  };
+
   const handleSaveRow = (row) => {
     if (row.modelName.trim().length === 0) {
       setStatusText('modelName is required');
@@ -214,6 +234,12 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
     setBusyRowKey(row.id);
     deleteRowMutation.mutate(row.id);
   };
+
+  const handleAddRow = () => {
+    setRows((prev) => [createEmptyRow(billingMode), ...prev]);
+  };
+
+  const isRequestMode = billingMode === 'request';
 
   return (
     <Transition appear show={open}>
@@ -286,14 +312,46 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
                     />
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setRows((prev) => [createEmptyRow(), ...prev])}
-                    className="inline-flex items-center gap-2 rounded-md bg-surface-tertiary px-3 py-2 text-sm text-text-primary hover:bg-surface-hover"
-                  >
-                    <Plus className="h-4 w-4" />
-                    {localize('com_model_pricing_add')}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleModeChange('token')}
+                      className={cn(
+                        'rounded-md px-3 py-2 text-sm transition-colors',
+                        !isRequestMode
+                          ? 'bg-surface-tertiary text-text-primary'
+                          : 'border border-border-light text-text-secondary hover:bg-surface-hover',
+                      )}
+                    >
+                      按量计费
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleModeChange('request')}
+                      className={cn(
+                        'rounded-md px-3 py-2 text-sm transition-colors',
+                        isRequestMode
+                          ? 'bg-surface-tertiary text-text-primary'
+                          : 'border border-border-light text-text-secondary hover:bg-surface-hover',
+                      )}
+                    >
+                      按次计费
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddRow}
+                      className="inline-flex items-center gap-2 rounded-md bg-surface-tertiary px-3 py-2 text-sm text-text-primary hover:bg-surface-hover"
+                    >
+                      <Plus className="h-4 w-4" />
+                      {localize('com_model_pricing_add')}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-border-light bg-surface-secondary px-3 py-2 text-sm text-text-secondary">
+                  当前为全局统一模式，所有模型将按
+                  {isRequestMode ? '按次计费' : '按量计费'}
+                  生效。
                 </div>
 
                 {Boolean(pricingQuery.error) && (
@@ -313,22 +371,34 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
                 <div className="max-h-[520px] overflow-y-auto rounded-lg border border-border-light">
                   <table className="w-full table-fixed divide-y divide-border-light text-sm">
                     <thead className="bg-surface-secondary text-left text-text-secondary">
-                      <tr>
-                        <th className="w-[17%] px-3 py-3 font-medium">{MODEL_PRICING_HEADERS[0]}</th>
-                        <th className="w-[13%] px-3 py-3 font-medium">{MODEL_PRICING_HEADERS[1]}</th>
-                        <th className="w-[12%] px-3 py-3 font-medium">{MODEL_PRICING_HEADERS[2]}</th>
-                        <th className="w-[13%] px-3 py-3 font-medium">{MODEL_PRICING_HEADERS[3]}</th>
-                        <th className="w-[13%] px-3 py-3 font-medium">{MODEL_PRICING_HEADERS[4]}</th>
-                        <th className="w-[13%] px-3 py-3 font-medium">{MODEL_PRICING_HEADERS[5]}</th>
-                        <th className="w-[7%] px-3 py-3 font-medium">{MODEL_PRICING_HEADERS[6]}</th>
-                        <th className="w-[12%] px-3 py-3 font-medium">{MODEL_PRICING_HEADERS[7]}</th>
-                      </tr>
+                      {!isRequestMode ? (
+                        <tr>
+                          <th className="w-[17%] px-3 py-3 font-medium">{TOKEN_HEADERS[0]}</th>
+                          <th className="w-[13%] px-3 py-3 font-medium">{TOKEN_HEADERS[1]}</th>
+                          <th className="w-[12%] px-3 py-3 font-medium">{TOKEN_HEADERS[2]}</th>
+                          <th className="w-[13%] px-3 py-3 font-medium">{TOKEN_HEADERS[3]}</th>
+                          <th className="w-[13%] px-3 py-3 font-medium">{TOKEN_HEADERS[4]}</th>
+                          <th className="w-[13%] px-3 py-3 font-medium">{TOKEN_HEADERS[5]}</th>
+                          <th className="w-[7%] px-3 py-3 font-medium">{TOKEN_HEADERS[6]}</th>
+                          <th className="w-[12%] px-3 py-3 font-medium">{TOKEN_HEADERS[7]}</th>
+                        </tr>
+                      ) : (
+                        <tr>
+                          <th className="w-[40%] px-3 py-3 font-medium">{REQUEST_HEADERS[0]}</th>
+                          <th className="w-[24%] px-3 py-3 font-medium">{REQUEST_HEADERS[1]}</th>
+                          <th className="w-[16%] px-3 py-3 font-medium">{REQUEST_HEADERS[2]}</th>
+                          <th className="w-[20%] px-3 py-3 font-medium">{REQUEST_HEADERS[3]}</th>
+                        </tr>
+                      )}
                     </thead>
 
                     <tbody className="divide-y divide-border-light bg-background text-text-primary">
                       {pricingQuery.isLoading && (
                         <tr>
-                          <td className="px-3 py-8 text-center text-text-secondary" colSpan={8}>
+                          <td
+                            className="px-3 py-8 text-center text-text-secondary"
+                            colSpan={isRequestMode ? 4 : 8}
+                          >
                             {localize('com_ui_loading')}
                           </td>
                         </tr>
@@ -336,14 +406,17 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
 
                       {!pricingQuery.isLoading && filteredRows.length === 0 && (
                         <tr>
-                          <td className="px-3 py-8 text-center text-text-secondary" colSpan={8}>
+                          <td
+                            className="px-3 py-8 text-center text-text-secondary"
+                            colSpan={isRequestMode ? 4 : 8}
+                          >
                             {localize('com_model_pricing_no_rows')}
                           </td>
                         </tr>
                       )}
 
                       {filteredRows.map(({ row, index: rowIndex }) => {
-                        return (
+                        return !isRequestMode ? (
                           <tr key={`${row.id ?? 'new'}-${row.modelName}-${rowIndex}`}>
                             <td className="px-3 py-3">
                               <input
@@ -424,6 +497,79 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
                                     return;
                                   }
                                   updateRow(rowIndex, { imageOutputPrice: nextValue });
+                                }}
+                                className="h-9 w-full rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={row.multiplier}
+                                onChange={(e) => {
+                                  const nextValue = e.target.value.trim();
+                                  if (!decimalInputPattern.test(nextValue)) {
+                                    return;
+                                  }
+                                  updateRow(rowIndex, { multiplier: nextValue });
+                                }}
+                                className="h-9 w-full rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center justify-start gap-1.5 whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveRow(row)}
+                                  disabled={
+                                    saveRowMutation.isLoading ||
+                                    deleteRowMutation.isLoading ||
+                                    busyRowKey === (row.id ?? `new:${row.modelName}`)
+                                  }
+                                  className="inline-flex min-w-[64px] items-center justify-center gap-1 rounded-md bg-surface-tertiary px-2 py-1 text-xs text-text-primary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Save className="h-3.5 w-3.5" />
+                                  {row.id
+                                    ? localize('com_user_mgmt_update')
+                                    : localize('com_model_pricing_add')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRow(row, rowIndex)}
+                                  disabled={
+                                    saveRowMutation.isLoading ||
+                                    deleteRowMutation.isLoading ||
+                                    busyRowKey === (row.id ?? `new:${row.modelName}`)
+                                  }
+                                  className="inline-flex min-w-[64px] items-center justify-center gap-1 rounded-md border border-border-light px-2 py-1 text-xs text-text-primary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  {localize('com_ui_delete')}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr key={`${row.id ?? 'new'}-${row.modelName}-${rowIndex}-request`}>
+                            <td className="px-3 py-3">
+                              <input
+                                type="text"
+                                value={row.modelName}
+                                onChange={(e) => updateRow(rowIndex, { modelName: e.target.value })}
+                                className="h-9 w-full rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={row.requestPrice ?? '0'}
+                                onChange={(e) => {
+                                  const nextValue = e.target.value.trim();
+                                  if (!decimalInputPattern.test(nextValue)) {
+                                    return;
+                                  }
+                                  updateRow(rowIndex, { requestPrice: nextValue });
                                 }}
                                 className="h-9 w-full rounded-md border border-border-light bg-surface-primary px-3 text-sm outline-none focus:border-border-xheavy"
                               />

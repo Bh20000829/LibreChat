@@ -39,6 +39,12 @@ const imageModelPricingSchema = new mongoose.Schema(
       min: 0,
       default: 0,
     },
+    requestPrice: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
     multiplier: {
       type: Number,
       required: true,

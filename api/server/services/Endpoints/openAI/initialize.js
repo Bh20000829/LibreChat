@@ -17,6 +17,8 @@ const initializeClient = async ({
   optionsOnly,
   overrideEndpoint,
   overrideModel,
+  providerEnvPrefix,
+  useUserProviderApiKey,
 }) => {
   const appConfig = req.config;
   const {
@@ -66,18 +68,21 @@ const initializeClient = async ({
   const isAzureOpenAI = endpoint === EModelEndpoint.azureOpenAI;
 
   if (!userProvidesKey && req.user) {
-    const providerEnvPrefix = isAzureOpenAI ? 'AZURE_API_KEY' : 'OPENAI_API_KEY';
+    const selectedProviderEnvPrefix =
+      providerEnvPrefix ?? (isAzureOpenAI ? 'AZURE_API_KEY' : 'OPENAI_API_KEY');
+    const prefixedDefaultApiKey = process.env[selectedProviderEnvPrefix];
     const routing = await resolveProviderApiKeyForUser({
       user: req.user,
-      providerEnvPrefix,
-      defaultApiKey: apiKey,
+      providerEnvPrefix: selectedProviderEnvPrefix,
+      defaultApiKey: prefixedDefaultApiKey ?? apiKey,
+      useUserProviderApiKey,
     });
 
     apiKey = routing.apiKey;
 
     if (routing.source !== 'default') {
       console.log(
-        `===============[${providerEnvPrefix}] User: ${req.user.id || req.user._id}, ` +
+        `===============[${selectedProviderEnvPrefix}] User: ${req.user.id || req.user._id}, ` +
           `Source: ${routing.source}, Type: ${routing.groupType ?? 'N/A'}, Env: ${routing.envKey ?? 'N/A'}`,
       );
     }

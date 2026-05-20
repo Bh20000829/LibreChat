@@ -22,6 +22,7 @@ const listImageModelPricingController = async (_req, res) => {
         textOutputPrice: item.textOutputPrice,
         imageInputPrice: item.imageInputPrice,
         imageOutputPrice: item.imageOutputPrice,
+        requestPrice: item.requestPrice,
         multiplier: item.multiplier,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
@@ -43,6 +44,7 @@ const createImageModelPricingController = async (req, res) => {
       textOutputPrice,
       imageInputPrice,
       imageOutputPrice,
+      requestPrice,
       multiplier,
     } = req.body || {};
 
@@ -57,6 +59,7 @@ const createImageModelPricingController = async (req, res) => {
       textOutputPrice: normalizeNumber(textOutputPrice, 'textOutputPrice'),
       imageInputPrice: normalizeNumber(imageInputPrice, 'imageInputPrice'),
       imageOutputPrice: normalizeNumber(imageOutputPrice, 'imageOutputPrice'),
+      requestPrice: normalizeNumber(requestPrice ?? 0, 'requestPrice'),
       multiplier: normalizeNumber(multiplier, 'multiplier'),
       createdBy: req.user?._id ?? req.user?.id,
       updatedBy: req.user?._id ?? req.user?.id,
@@ -72,6 +75,7 @@ const createImageModelPricingController = async (req, res) => {
       textOutputPrice: created.textOutputPrice,
       imageInputPrice: created.imageInputPrice,
       imageOutputPrice: created.imageOutputPrice,
+      requestPrice: created.requestPrice,
       multiplier: created.multiplier,
       createdAt: created.createdAt,
       updatedAt: created.updatedAt,
@@ -99,6 +103,7 @@ const updateImageModelPricingController = async (req, res) => {
       textOutputPrice,
       imageInputPrice,
       imageOutputPrice,
+      requestPrice,
       multiplier,
     } = req.body || {};
 
@@ -135,6 +140,10 @@ const updateImageModelPricingController = async (req, res) => {
       updates.imageOutputPrice = normalizeNumber(imageOutputPrice, 'imageOutputPrice');
     }
 
+    if (requestPrice != null) {
+      updates.requestPrice = normalizeNumber(requestPrice, 'requestPrice');
+    }
+
     if (multiplier != null) {
       updates.multiplier = normalizeNumber(multiplier, 'multiplier');
     }
@@ -163,6 +172,7 @@ const updateImageModelPricingController = async (req, res) => {
       textOutputPrice: updated.textOutputPrice,
       imageInputPrice: updated.imageInputPrice,
       imageOutputPrice: updated.imageOutputPrice,
+      requestPrice: updated.requestPrice,
       multiplier: updated.multiplier,
       updatedAt: updated.updatedAt,
     });
