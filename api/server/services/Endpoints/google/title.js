@@ -202,10 +202,12 @@ const addTitle = async (req, { text, response, client }) => {
 	const appConfig = req.config;
 	const providerConfig = appConfig.endpoints?.[EModelEndpoint.google];
 	const isImageMode = (client.options?.modelOptions?.mode ?? req.body?.mode) === 'image';
+	const useImageModeTitleSelection =
+		isImageMode && isEnabled(process.env.IMAGE_TITLE_USE_IMAGE_MODEL ?? 'false');
 	const currentSpecName = client.options?.spec ?? req.body?.spec;
 	const currentSpec = getCurrentSpec(req, currentSpecName);
 	const imageTitleModelMap = parseImageTitleModelMap(process.env.GOOGLE_IMAGE_TITLE_MODEL_MAP);
-	const imageFixedTitleModel = isImageMode
+	const imageFixedTitleModel = useImageModeTitleSelection
 		? resolveImageFixedTitleModel({
 				map: imageTitleModelMap,
 				specName: currentSpecName,
@@ -213,7 +215,7 @@ const addTitle = async (req, { text, response, client }) => {
 				model: client.options?.modelOptions?.model,
 		  })
 		: null;
-	const chatModelFromSpecs = isImageMode
+	const chatModelFromSpecs = useImageModeTitleSelection
 		? resolveFirstChatModelBySpec({
 				req,
 				endpoint: EModelEndpoint.google,
@@ -221,7 +223,7 @@ const addTitle = async (req, { text, response, client }) => {
 		  })
 		: null;
 	let model =
-		isImageMode
+		useImageModeTitleSelection
 			? imageFixedTitleModel ??
 				providerConfig?.titleModel ??
 				GOOGLE_TITLE_MODEL ??
@@ -239,9 +241,17 @@ const addTitle = async (req, { text, response, client }) => {
 		model = client.options?.modelOptions.model;
 	}
 
+	const {
+		reverseProxyUrl: _ignoredImageReverseProxyUrl,
+		...titleBaseOptions
+	} = client.options ?? {};
+
+	const { mode: _ignoredMode, ...baseModelOptions } = client.options?.modelOptions ?? {};
+
 	const titleEndpointOptions = {
-		...client.options,
-		modelOptions: { ...client.options?.modelOptions, model: model },
+		...titleBaseOptions,
+		model_parameters: { ...baseModelOptions, model: model },
+		modelOptions: { ...baseModelOptions, model: model },
 		attachments: undefined,
 	};
 

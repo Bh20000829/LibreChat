@@ -201,6 +201,83 @@ const getImageFavoritePayload = (message: TMessage, attachments?: TAttachment[])
   };
 };
 
+const convertBlobToPng = async (blob: Blob): Promise<Blob> => {
+  if (blob.type === 'image/png') {
+    return blob;
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to decode image for clipboard conversion.'));
+      img.src = objectUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Failed to initialize canvas for clipboard conversion.');
+    }
+
+    context.drawImage(image, 0, 0);
+
+    const pngBlob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((value) => resolve(value), 'image/png');
+    });
+
+    if (!pngBlob) {
+      throw new Error('Failed to convert image to PNG for clipboard copy.');
+    }
+
+    return pngBlob;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+};
+
+const writeImageToClipboard = async (blob: Blob): Promise<void> => {
+  if (typeof ClipboardItem === 'undefined') {
+    throw new Error('Clipboard image copy is not supported in this browser.');
+  }
+
+  const writeBlob = async (mimeType: string, value: Blob) => {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        [mimeType]: value,
+      }),
+    ]);
+  };
+
+  const sourceMimeType = blob.type || 'image/png';
+
+  if (typeof ClipboardItem.supports === 'function' && !ClipboardItem.supports(sourceMimeType)) {
+    const pngBlob = await convertBlobToPng(blob);
+    await writeBlob('image/png', pngBlob);
+    return;
+  }
+
+  try {
+    await writeBlob(sourceMimeType, blob);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    const unsupportedType = /type\s+image\/.+\s+not\s+supported\s+on\s+write/i.test(message);
+
+    if (sourceMimeType !== 'image/png' && unsupportedType) {
+      const pngBlob = await convertBlobToPng(blob);
+      await writeBlob('image/png', pngBlob);
+      return;
+    }
+
+    throw error;
+  }
+};
+
 const HoverButton = memo(
   ({
     id,
@@ -407,15 +484,7 @@ const HoverButtons = ({
       }
 
       const blob = await response.blob();
-      if (typeof ClipboardItem === 'undefined') {
-        throw new Error('Clipboard image copy is not supported in this browser.');
-      }
-
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          [blob.type || 'image/png']: blob,
-        }),
-      ]);
+      await writeImageToClipboard(blob);
 
       setIsImageCopied(true);
       showToast({

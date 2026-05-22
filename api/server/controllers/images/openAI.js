@@ -244,7 +244,45 @@ function getImageOutputFormat(item, fallback = 'png') {
     return item.inline_data.mime_type.replace('image/', '').split(';')[0];
   }
 
+  if (typeof item?.url === 'string' && item.url.length > 0) {
+    try {
+      const pathname = new URL(item.url).pathname.toLowerCase();
+      if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) {
+        return 'jpeg';
+      }
+      if (pathname.endsWith('.png')) {
+        return 'png';
+      }
+      if (pathname.endsWith('.webp')) {
+        return 'webp';
+      }
+      if (pathname.endsWith('.gif')) {
+        return 'gif';
+      }
+    } catch (_error) {
+      // Ignore URL parsing errors and use fallback output format.
+    }
+  }
+
   return fallback;
+}
+
+function extractImageUrlFromText(text) {
+  if (typeof text !== 'string' || text.trim().length === 0) {
+    return null;
+  }
+
+  const markdownMatch = text.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/i);
+  if (markdownMatch?.[1]) {
+    return markdownMatch[1];
+  }
+
+  const urlMatch = text.match(/https?:\/\/[^\s)]+\.(?:png|jpe?g|webp|gif)(?:\?[^\s)]*)?/i);
+  if (urlMatch?.[0]) {
+    return urlMatch[0];
+  }
+
+  return null;
 }
 
 function createImageAsset(item) {
@@ -412,12 +450,26 @@ function normalizeGoogleImageResult(imageResult, _fallbackText) {
   const response = imageResult?.response ?? imageResult;
   const candidates = Array.isArray(response?.candidates) ? response.candidates : [];
   const parts = candidates.flatMap((candidate) => candidate?.content?.parts ?? []);
-  const images = parts.filter(
-    (part) =>
-      part?.thought !== true &&
-      ((part?.inlineData?.mimeType?.startsWith('image/') && part.inlineData.data) ||
-        (part?.inline_data?.mime_type?.startsWith('image/') && part.inline_data.data)),
-  );
+  const images = [];
+  for (const part of parts) {
+    if (part?.thought === true) {
+      continue;
+    }
+
+    const hasInlineImage =
+      (part?.inlineData?.mimeType?.startsWith('image/') && part.inlineData.data) ||
+      (part?.inline_data?.mime_type?.startsWith('image/') && part.inline_data.data);
+
+    if (hasInlineImage) {
+      images.push(part);
+      continue;
+    }
+
+    const imageUrl = extractImageUrlFromText(part?.text);
+    if (imageUrl) {
+      images.push({ url: imageUrl });
+    }
+  }
   const outputFormat = getImageOutputFormat(images[0], 'png');
 
   return {
@@ -610,9 +662,20 @@ async function generateOpenAIImage(req, res) {
     const initializeClient = getInitializeClient(endpoint);
     const imageReverseProxyUrl = resolveImageReverseProxy(endpoint);
     const imageProviderEnvPrefix = resolveImageProviderKeyPrefix(endpoint);
-    const imageEndpointOption = imageReverseProxyUrl
+    const imageEndpointOptionBase = imageReverseProxyUrl
       ? { ...endpointOption, reverseProxyUrl: imageReverseProxyUrl }
       : endpointOption;
+    const imageEndpointOption = {
+      ...imageEndpointOptionBase,
+      model_parameters: {
+        ...(imageEndpointOptionBase?.model_parameters ?? {}),
+        mode: 'image',
+      },
+      modelOptions: {
+        ...(imageEndpointOptionBase?.modelOptions ?? {}),
+        mode: 'image',
+      },
+    };
     const { client } = await initializeClient({
       req,
       res,

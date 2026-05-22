@@ -81,6 +81,14 @@ function normalizeImageModelType(model) {
   return model.replace(/-image(?:-[a-z0-9.-]+)?$/i, '').trim() || model;
 }
 
+function isLikelyImageModel(model) {
+  if (!model || typeof model !== 'string') {
+    return false;
+  }
+
+  return /(image|dall-e|gpt-image)/i.test(model);
+}
+
 function parseImageTitleModelMap(raw) {
   if (!raw || typeof raw !== 'string') {
     return {};
@@ -177,10 +185,12 @@ const addTitle = async (req, { text, response, client }) => {
   const { OPENAI_TITLE_MODEL } = process.env ?? {};
   const providerConfig = req.config?.endpoints?.[EModelEndpoint.openAI] ?? {};
   const isImageMode = (client.options?.modelOptions?.mode ?? req.body?.mode) === 'image';
+  const useImageModeTitleSelection =
+    isImageMode && isEnabled(process.env.IMAGE_TITLE_USE_IMAGE_MODEL ?? 'false');
   const currentSpecName = client.options?.spec ?? req.body?.spec;
   const currentSpec = getCurrentSpec(req, currentSpecName);
   const imageTitleModelMap = parseImageTitleModelMap(process.env.OPENAI_IMAGE_TITLE_MODEL_MAP);
-  const imageFixedTitleModel = isImageMode
+  const imageFixedTitleModel = useImageModeTitleSelection
     ? resolveImageFixedTitleModel({
         map: imageTitleModelMap,
         specName: currentSpecName,
@@ -188,36 +198,49 @@ const addTitle = async (req, { text, response, client }) => {
         model: client.options?.modelOptions?.model,
       })
     : null;
-  const chatModelFromSpecs = isImageMode
+  const chatModelFromSpecs = useImageModeTitleSelection
     ? resolveFirstChatModelBySpec({
         req,
         endpoint: EModelEndpoint.openAI,
         currentSpecName,
       })
     : null;
+  const currentModel = client.options?.modelOptions?.model;
+  const safeCurrentModel = isLikelyImageModel(currentModel) ? null : currentModel;
   let model =
-    isImageMode
+    useImageModeTitleSelection
       ? imageFixedTitleModel ??
         providerConfig.titleModel ??
         OPENAI_TITLE_MODEL ??
         chatModelFromSpecs ??
         client.options?.titleModel ??
-        client.options?.modelOptions?.model ??
+        safeCurrentModel ??
         'gpt-4o-mini'
       : providerConfig.titleModel ??
         OPENAI_TITLE_MODEL ??
         client.options?.titleModel ??
-        client.options?.modelOptions?.model ??
+        safeCurrentModel ??
         'gpt-4o-mini';
 
   if (model === Constants.CURRENT_MODEL) {
     model = client.options?.modelOptions?.model ?? model;
   }
 
+  const {
+    reverseProxyUrl: _ignoredImageReverseProxyUrl,
+    ...titleBaseOptions
+  } = client.options ?? {};
+
+  const { mode: _ignoredMode, ...baseModelOptions } = client.options?.modelOptions ?? {};
+
   const titleEndpointOptions = {
-    ...client.options,
+    ...titleBaseOptions,
     model_parameters: {
-      ...(client.options?.modelOptions ?? {}),
+      ...baseModelOptions,
+      model,
+    },
+    modelOptions: {
+      ...baseModelOptions,
       model,
     },
     attachments: undefined,
