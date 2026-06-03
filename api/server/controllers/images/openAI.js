@@ -32,6 +32,7 @@ const IMAGE_SIZE_MAP = {
 };
 
 const SUPPORTED_IMAGE_ENDPOINTS = new Set([EModelEndpoint.openAI, EModelEndpoint.google]);
+const IMAGE_GENERATION_HEARTBEAT_MS = 15000;
 
 const providerTitleGenerators = {
   [EModelEndpoint.openAI]: addTitle,
@@ -69,6 +70,36 @@ function resolveImageProviderKeyPrefix(endpoint) {
   }
 
   return 'OPENAI_IMAGE_API_KEY';
+}
+
+function startImageKeepAlive({ res, providerLabel, conversationId, model }) {
+  const heartbeat = () => {
+    if (res.writableEnded || res.destroyed) {
+      return;
+    }
+
+    try {
+      sendEvent(res, {
+        event: 'image_generation_heartbeat',
+        data: {
+          conversationId,
+          model,
+          timestamp: Date.now(),
+        },
+      });
+    } catch (error) {
+      logger.debug(`[${providerLabel} Image Controller] Failed to send keep-alive heartbeat`, {
+        conversationId,
+        model,
+        error: error.message,
+      });
+    }
+  };
+
+  const timer = setInterval(heartbeat, IMAGE_GENERATION_HEARTBEAT_MS);
+  timer.unref?.();
+
+  return () => clearInterval(timer);
 }
 
 function splitOverrideId(rawId) {
@@ -569,6 +600,7 @@ async function generateOpenAIImage(req, res) {
   const resolvedImageCount = resolveImageCount();
   const resolvedModel = imageModelOptions.model ?? model;
   const providerLabel = getProviderLabel(endpoint);
+  let stopImageKeepAlive = () => {};
 
   const sender = getResponseSender({
     model: resolvedModel,
@@ -648,6 +680,12 @@ async function generateOpenAIImage(req, res) {
 
     await saveConversation();
     sendEvent(res, { message: userMessage, created: true });
+    stopImageKeepAlive = startImageKeepAlive({
+      res,
+      providerLabel,
+      conversationId,
+      model: resolvedModel,
+    });
 
     logger.info(`[${providerLabel} Image Controller] Stage completed`, {
       stage: 'pre-provider',
@@ -907,6 +945,7 @@ async function generateOpenAIImage(req, res) {
       durationMs: Date.now() - startedAt,
     });
 
+    stopImageKeepAlive();
     sendEvent(res, {
       final: true,
       conversation,
@@ -942,6 +981,7 @@ async function generateOpenAIImage(req, res) {
         });
     }
   } catch (error) {
+    stopImageKeepAlive();
     logger.error(`[${providerLabel} Image Controller] Image generation failed`, error);
 
     const errorResponse = {
