@@ -2,12 +2,7 @@ import { memo, useRef, useMemo, useEffect, useState, useCallback } from 'react';
 import { useWatch } from 'react-hook-form';
 import { TextareaAutosize, Dropdown } from '@librechat/client';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import {
-  Constants,
-  EModelEndpoint,
-  isAssistantsEndpoint,
-  isAgentsEndpoint,
-} from 'librechat-data-provider';
+import { Constants, isAssistantsEndpoint, isAgentsEndpoint } from 'librechat-data-provider';
 import {
   useChatContext,
   useChatFormContext,
@@ -73,6 +68,7 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
   const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
   const centerFormOnLanding = useRecoilValue(store.centerFormOnLanding);
   const isTemporary = useRecoilValue(store.isTemporary);
+  const saveDrafts = useRecoilValue(store.saveDrafts);
 
   const [badges, setBadges] = useRecoilState(store.chatBadges);
   const [isEditingBadges, setIsEditingBadges] = useRecoilState(store.isEditingBadges);
@@ -111,10 +107,7 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
     () => conversation?.conversationId ?? Constants.NEW_CONVO,
     [conversation?.conversationId],
   );
-  const imageModeEnabled = useMemo(
-    () => mode === 'image',
-    [mode],
-  );
+  const imageModeEnabled = useMemo(() => mode === 'image', [mode]);
 
   const isRTL = useMemo(
     () => (chatDirection != null ? chatDirection?.toLowerCase() === 'rtl' : false),
@@ -146,15 +139,20 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
     }
   }, [isCollapsed]);
 
-  // useAutoSave({
-  //   files,
-  //   setFiles,
-  //   textAreaRef,
-  //   conversationId,
-  //   isSubmitting: isSubmitting || isSubmittingAdded,
-  // });
+  useAutoSave({
+    files,
+    setFiles,
+    textAreaRef,
+    conversationId,
+    mode,
+    isSubmitting: isSubmitting || isSubmittingAdded,
+  });
 
   useEffect(() => {
+    if (saveDrafts) {
+      return;
+    }
+
     // 清空文字输入框
     methods.setValue('text', '');
     // 清空已上传的文件（如果有 setFiles 方法）
@@ -165,7 +163,7 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
     if (textAreaRef.current) {
       textAreaRef.current.focus();
     }
-  }, [conversationId, methods, setFiles]);
+  }, [conversationId, methods, saveDrafts, setFiles]);
 
   const { submitMessage, submitPrompt } = useSubmitMessage();
 
@@ -351,7 +349,7 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
                     onChange={setOption('imageSize')}
                     options={imageSizeOptions}
                     ariaLabel={localize('com_ui_size')}
-                    className="min-w-[92px] border-transparent bg-transparent text-text-primary/85 hover:bg-surface-hover/50"
+                    className="text-text-primary/85 hover:bg-surface-hover/50 min-w-[92px] border-transparent bg-transparent"
                     sizeClasses="w-[140px]"
                   />
                 )}

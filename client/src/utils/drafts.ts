@@ -28,7 +28,7 @@ export const decodeBase64 = (base64String: string): string => {
 };
 
 export const setDraft = ({ id, value }: { id: string; value?: string }) => {
-  if (value && value.length > 1) {
+  if (value && value.length > 0) {
     localStorage.setItem(`${LocalStorageKeys.TEXT_DRAFT}${id}`, encodeBase64(value));
     return;
   }

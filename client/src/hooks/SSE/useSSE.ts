@@ -20,13 +20,17 @@ import useEventHandlers from './useEventHandlers';
 import store from '~/store';
 
 const clearDraft = (conversationId?: string | null) => {
-  if (conversationId) {
-    localStorage.removeItem(`${LocalStorageKeys.TEXT_DRAFT}${conversationId}`);
-    localStorage.removeItem(`${LocalStorageKeys.FILES_DRAFT}${conversationId}`);
-  } else {
-    localStorage.removeItem(`${LocalStorageKeys.TEXT_DRAFT}${Constants.NEW_CONVO}`);
-    localStorage.removeItem(`${LocalStorageKeys.FILES_DRAFT}${Constants.NEW_CONVO}`);
+  const id = conversationId || Constants.NEW_CONVO;
+  const draftIds = [id];
+
+  if (id === Constants.NEW_CONVO) {
+    draftIds.push(`${Constants.NEW_CONVO}_chat`, `${Constants.NEW_CONVO}_image`);
   }
+
+  draftIds.forEach((draftId) => {
+    localStorage.removeItem(`${LocalStorageKeys.TEXT_DRAFT}${draftId}`);
+    localStorage.removeItem(`${LocalStorageKeys.FILES_DRAFT}${draftId}`);
+  });
 };
 
 type ChatHelpers = Pick<

@@ -67,16 +67,6 @@ const useFileDeletion = ({
 
       const progress = _file['progress'] ?? 1;
 
-      if (progress < 1) {
-        return;
-      }
-      const file: t.BatchFile = {
-        file_id,
-        embedded,
-        filepath,
-        source,
-      };
-
       if (setFiles) {
         setFiles((currentFiles) => {
           const updatedFiles = new Map(currentFiles);
@@ -87,6 +77,17 @@ const useFileDeletion = ({
           return updatedFiles;
         });
       }
+
+      if (progress < 1) {
+        return;
+      }
+
+      const file: t.BatchFile = {
+        file_id,
+        embedded,
+        filepath,
+        source,
+      };
 
       if (attached) {
         return;

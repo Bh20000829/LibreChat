@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { LocalStorageKeys, Constants } from 'librechat-data-provider';
 import type { TFile } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
-import { clearDraft, getDraft, setDraft } from '~/utils';
+import { getDraft, setDraft } from '~/utils';
 import { useChatFormContext } from '~/Providers';
 import { useGetFiles } from '~/data-provider';
 import store from '~/store';
@@ -12,12 +12,14 @@ import store from '~/store';
 export const useAutoSave = ({
   isSubmitting,
   conversationId: _conversationId,
+  mode,
   textAreaRef,
   setFiles,
   files,
 }: {
   isSubmitting?: boolean;
   conversationId?: string | null;
+  mode?: string | null;
   textAreaRef?: React.RefObject<HTMLTextAreaElement>;
   files: Map<string, ExtendedFile>;
   setFiles: SetterOrUpdater<Map<string, ExtendedFile>>;
@@ -25,22 +27,47 @@ export const useAutoSave = ({
   // setting for auto-save
   const { setValue } = useChatFormContext();
   const saveDrafts = useRecoilValue<boolean>(store.saveDrafts);
-  const conversationId = isSubmitting ? Constants.PENDING_CONVO : _conversationId;
+  const getDraftId = useCallback(
+    (id?: string | null) => {
+      const conversationId = id ?? '';
+      if (conversationId === Constants.NEW_CONVO) {
+        return `${conversationId}_${mode === 'image' ? 'image' : 'chat'}`;
+      }
+
+      return conversationId;
+    },
+    [mode],
+  );
+  const conversationId = isSubmitting ? Constants.PENDING_CONVO : getDraftId(_conversationId);
 
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const fileIds = useMemo(() => Array.from(files.keys()), [files]);
   const { data: fileList } = useGetFiles<TFile[]>();
+  const prevFileDraftStateRef = useRef<{ conversationId: string | null; fileIds: string[] }>({
+    conversationId: null,
+    fileIds: [],
+  });
+
+  const getFileDraftIds = useCallback((id: string) => {
+    try {
+      return JSON.parse(
+        (localStorage.getItem(`${LocalStorageKeys.FILES_DRAFT}${id}`) ?? '') || '[]',
+      ) as string[];
+    } catch {
+      return [];
+    }
+  }, []);
 
   const restoreFiles = useCallback(
     (id: string) => {
-      const filesDraft = JSON.parse(
-        (localStorage.getItem(`${LocalStorageKeys.FILES_DRAFT}${id}`) ?? '') || '[]',
-      ) as string[];
+      const filesDraft = getFileDraftIds(id);
 
       if (filesDraft.length === 0) {
         setFiles(new Map());
         return;
       }
+
+      const recoveredFiles = new Map<string, ExtendedFile>();
 
       // Retrieve files stored in localStorage from files in fileList and set them to `setFiles`
       // If a file is found with `temp_file_id`, use `temp_file_id` as a key in `setFiles`
@@ -55,29 +82,24 @@ export const useAutoSave = ({
             };
 
         if (fileToRecover) {
-          setFiles((currentFiles) => {
-            const updatedFiles = new Map(currentFiles);
-            updatedFiles.set(fileIdToRecover, {
-              ...fileToRecover,
-              progress: 1,
-              attached: true,
-              size: fileToRecover.bytes,
-            });
-            return updatedFiles;
+          recoveredFiles.set(fileIdToRecover, {
+            ...fileToRecover,
+            progress: 1,
+            attached: true,
+            size: fileToRecover.bytes,
           });
         }
       });
+
+      setFiles(recoveredFiles);
     },
-    [fileList, setFiles],
+    [fileList, getFileDraftIds, setFiles],
   );
 
   const restoreText = useCallback(
     (id: string) => {
       const savedDraft = getDraft(id);
-      if (!savedDraft) {
-        return;
-      }
-      setValue('text', savedDraft);
+      setValue('text', savedDraft ?? '');
     },
     [setValue],
   );
@@ -88,8 +110,8 @@ export const useAutoSave = ({
         return;
       }
       // Save the draft of the current conversation before switching
-      if (textAreaRef.current.value === '' || textAreaRef.current.value.length === 1) {
-        clearDraft(id);
+      if (textAreaRef.current.value === '') {
+        setDraft({ id, value: '' });
       } else {
         setDraft({ id, value: textAreaRef.current.value });
       }
@@ -195,7 +217,7 @@ export const useAutoSave = ({
             pendingFileDraft,
           );
           localStorage.removeItem(`${LocalStorageKeys.FILES_DRAFT}${Constants.PENDING_CONVO}`);
-          const filesDraft = JSON.parse(pendingFileDraft || '[]') as string[];
+          const filesDraft = getFileDraftIds(conversationId);
           if (filesDraft.length > 0) {
             restoreFiles(conversationId);
           }
@@ -221,6 +243,32 @@ export const useAutoSave = ({
     saveDrafts,
     saveText,
     setFiles,
+    getFileDraftIds,
+  ]);
+
+  useEffect(() => {
+    if (
+      !saveDrafts ||
+      conversationId == null ||
+      conversationId === '' ||
+      currentConversationId !== conversationId ||
+      fileList == null ||
+      files.size > 0
+    ) {
+      return;
+    }
+
+    if (getFileDraftIds(conversationId).length > 0) {
+      restoreFiles(conversationId);
+    }
+  }, [
+    conversationId,
+    currentConversationId,
+    fileList,
+    files.size,
+    getFileDraftIds,
+    restoreFiles,
+    saveDrafts,
   ]);
 
   useEffect(() => {
@@ -238,7 +286,19 @@ export const useAutoSave = ({
       return;
     }
 
+    const previousFileDraftState = prevFileDraftStateRef.current;
+    const hadFilesInCurrentConversation =
+      previousFileDraftState.conversationId === conversationId &&
+      previousFileDraftState.fileIds.length > 0;
+
     if (fileIds.length === 0) {
+      if (
+        !hadFilesInCurrentConversation &&
+        getFileDraftIds(conversationId).length > 0 &&
+        fileList == null
+      ) {
+        return;
+      }
       localStorage.removeItem(`${LocalStorageKeys.FILES_DRAFT}${conversationId}`);
     } else {
       localStorage.setItem(
@@ -246,5 +306,15 @@ export const useAutoSave = ({
         JSON.stringify(fileIds),
       );
     }
-  }, [files, conversationId, saveDrafts, currentConversationId, fileIds]);
+
+    prevFileDraftStateRef.current = { conversationId, fileIds };
+  }, [
+    files,
+    conversationId,
+    saveDrafts,
+    currentConversationId,
+    fileIds,
+    fileList,
+    getFileDraftIds,
+  ]);
 };

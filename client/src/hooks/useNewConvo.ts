@@ -306,11 +306,13 @@ const useNewConvo = (index = 0) => {
             source: file.source as FileSources, // Ensure that the source is of type FileSources
           }));
 
-        setFiles(new Map());
-        localStorage.setItem(LocalStorageKeys.FILES_TO_DELETE, JSON.stringify({}));
+        if (!saveDrafts) {
+          setFiles(new Map());
+          localStorage.setItem(LocalStorageKeys.FILES_TO_DELETE, JSON.stringify({}));
 
-        if (!saveDrafts && filesToDelete.length > 0) {
-          mutateAsync({ files: filesToDelete });
+          if (filesToDelete.length > 0) {
+            mutateAsync({ files: filesToDelete });
+          }
         }
       }
 
@@ -333,6 +335,7 @@ const useNewConvo = (index = 0) => {
       resetBadges,
       startupConfig,
       saveBadgesState,
+      currentMode,
       pauseGlobalAudio,
       switchToConversation,
       applyModelSpecEffects,
