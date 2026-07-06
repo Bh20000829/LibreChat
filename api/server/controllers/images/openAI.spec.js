@@ -2,6 +2,7 @@ jest.mock(
   '@librechat/api',
   () => ({
     sendEvent: jest.fn(),
+    getBalanceConfig: jest.fn(() => ({ enabled: false })),
   }),
   { virtual: true },
 );
@@ -15,6 +16,7 @@ jest.mock(
       warn: jest.fn(),
       error: jest.fn(),
     },
+    createModels: jest.fn(() => ({})),
   }),
   { virtual: true },
 );
@@ -56,9 +58,33 @@ jest.mock('~/models', () => ({
   getFiles: jest.fn(),
 }));
 
+const mockImageGenerationFindOne = jest.fn();
+
 jest.mock('~/models/ImageGenerationStore', () => ({
   saveImageGeneration: jest.fn(),
   saveImageGenerationUsage: jest.fn(),
+  ImageGeneration: {
+    findOne: mockImageGenerationFindOne,
+  },
+}));
+
+jest.mock('~/models/balanceMethods', () => ({
+  checkBalance: jest.fn(),
+}));
+
+jest.mock('~/models/pricingUtils', () => ({
+  calculateUsageCostCny: jest.fn(() => Promise.resolve(0)),
+  calculateImageUsageCostCny: jest.fn(() => Promise.resolve(0)),
+}));
+
+jest.mock('~/models/quotaUsage', () => ({
+  incrementQuotaUsage: jest.fn(),
+}));
+
+jest.mock('~/server/utils/countTokens', () => jest.fn(() => Promise.resolve(0)));
+
+jest.mock('~/server/services/Config', () => ({
+  getAppConfig: jest.fn(() => Promise.resolve({})),
 }));
 
 jest.mock('~/server/services/Endpoints/openAI', () => ({
@@ -91,9 +117,18 @@ const { uploadImageBuffer } = require('~/server/services/Files/process');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { Constants } = require('librechat-data-provider');
 
+function mockLatestImageGeneration(record) {
+  mockImageGenerationFindOne.mockReturnValue({
+    sort: jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue(record),
+    }),
+  });
+}
+
 describe('generateOpenAIImage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLatestImageGeneration(null);
   });
 
   it('routes google image titles through the google title service for new conversations', async () => {
@@ -486,7 +521,7 @@ describe('generateOpenAIImage', () => {
           text_tokens: 10,
           image_tokens: 40,
         },
-        output_toknes_details: undefined,
+        output_tokens_details: undefined,
       }),
     );
 
@@ -615,6 +650,247 @@ describe('generateOpenAIImage', () => {
       expect.objectContaining({
         operationType: 'edit',
         sourceImageFileIds: ['source-1'],
+        sourceImageCount: 1,
+      }),
+    );
+  });
+
+  it('inherits the latest generated image for OpenAI edits when no image is uploaded', async () => {
+    mockLatestImageGeneration({
+      responseMessageId: 'previous-response',
+      providerResponse: {
+        data: [
+          {
+            file_id: 'generated-source-1',
+            filepath: '/images/user/generated-source-1.png',
+          },
+        ],
+      },
+    });
+
+    const editImage = jest.fn().mockResolvedValue({
+      created: 123,
+      output_format: 'png',
+      data: [
+        {
+          b64_json: Buffer.from('edited-from-inherited-image').toString('base64'),
+          revised_prompt: 'make the background rainy',
+        },
+      ],
+      usage: {
+        total_tokens: 120,
+        input_tokens: 80,
+        output_tokens: 40,
+      },
+    });
+
+    initializeClient.mockResolvedValue({
+      client: {
+        generateImage: jest.fn(),
+        editImage,
+      },
+    });
+
+    saveConvo.mockResolvedValue({
+      conversationId: '11111111-1111-1111-1111-111111111111',
+      title: 'Image Chat',
+    });
+    saveMessage.mockResolvedValue({});
+    getFiles.mockResolvedValue([
+      {
+        file_id: 'generated-source-1',
+        filepath: '/images/user/generated-source-1.png',
+        filename: 'generated-source-1.png',
+        width: 1024,
+        height: 1024,
+        source: 'local',
+        type: 'image/png',
+      },
+    ]);
+    getStrategyFunctions.mockReturnValue({
+      getDownloadStream: jest
+        .fn()
+        .mockResolvedValue(Readable.from([Buffer.from('generated-source-image')])),
+    });
+    uploadImageBuffer.mockResolvedValue({
+      file_id: 'file-edited',
+      filepath: '/images/user/file-edited.png',
+      filename: 'file-edited.png',
+      width: 1024,
+      height: 1024,
+      source: 'local',
+      type: 'image/png',
+    });
+    saveImageGeneration.mockResolvedValue({ _id: 'image-generation-inherited-openai' });
+    saveImageGenerationUsage.mockResolvedValue({ _id: 'image-usage-inherited-openai' });
+
+    const req = {
+      user: { id: 'user-123' },
+      body: {
+        text: 'make the background rainy',
+        model: 'gpt-image-1',
+        endpoint: 'openAI',
+        endpointType: 'openAI',
+        conversationId: '11111111-1111-1111-1111-111111111111',
+        parentMessageId: 'previous-user-message',
+        endpointOption: {
+          model_parameters: {
+            size: '1024x1024',
+          },
+        },
+      },
+      abortController: { signal: {} },
+      config: {},
+    };
+    const res = { end: jest.fn() };
+
+    await generateOpenAIImage(req, res);
+
+    expect(mockImageGenerationFindOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user: 'user-123',
+        conversationId: '11111111-1111-1111-1111-111111111111',
+      }),
+    );
+    expect(editImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'make the background rainy',
+        model: 'gpt-image-1',
+        imageFiles: [
+          expect.objectContaining({
+            file_id: 'generated-source-1',
+            filename: 'generated-source-1.png',
+            buffer: expect.any(Buffer),
+          }),
+        ],
+      }),
+      req.abortController,
+    );
+    expect(saveImageGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationType: 'edit',
+        sourceImageFileIds: ['generated-source-1'],
+        sourceImageCount: 1,
+      }),
+    );
+  });
+
+  it('inherits the latest generated image for Google image generation requests', async () => {
+    mockLatestImageGeneration({
+      responseMessageId: 'previous-google-response',
+      providerResponse: {
+        data: [
+          {
+            file_id: 'google-generated-source-1',
+            filepath: '/images/user/google-generated-source-1.png',
+          },
+        ],
+      },
+    });
+
+    const generateImage = jest.fn().mockResolvedValue({
+      usageMetadata: {
+        promptTokenCount: 15,
+        candidatesTokenCount: 25,
+        totalTokenCount: 40,
+      },
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'image/png',
+                  data: Buffer.from('google-edited-image').toString('base64'),
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    initializeGoogleClient.mockResolvedValue({
+      client: {
+        generateImage,
+        titleConvo: jest.fn(),
+      },
+    });
+
+    saveConvo.mockResolvedValue({
+      conversationId: '33333333-3333-3333-3333-333333333333',
+      title: 'Image Chat',
+    });
+    saveMessage.mockResolvedValue({});
+    getFiles.mockResolvedValue([
+      {
+        file_id: 'google-generated-source-1',
+        filepath: '/images/user/google-generated-source-1.png',
+        filename: 'google-generated-source-1.png',
+        width: 1024,
+        height: 1024,
+        source: 'local',
+        type: 'image/png',
+      },
+    ]);
+    getStrategyFunctions.mockReturnValue({
+      getDownloadStream: jest
+        .fn()
+        .mockResolvedValue(Readable.from([Buffer.from('google-generated-source-image')])),
+    });
+    uploadImageBuffer.mockResolvedValue({
+      file_id: 'google-file-edited',
+      filepath: '/images/user/google-file-edited.png',
+      filename: 'google-file-edited.png',
+      width: 1024,
+      height: 1024,
+      source: 'local',
+      type: 'image/png',
+    });
+    saveImageGeneration.mockResolvedValue({ _id: 'image-generation-inherited-google' });
+    saveImageGenerationUsage.mockResolvedValue({ _id: 'image-usage-inherited-google' });
+
+    const req = {
+      user: { id: 'user-123' },
+      body: {
+        text: 'make it night time',
+        model: 'gemini-3-pro-image-preview',
+        endpoint: 'google',
+        endpointType: 'google',
+        conversationId: '33333333-3333-3333-3333-333333333333',
+        parentMessageId: 'previous-user-message',
+        imageSize: '1:1',
+        endpointOption: {
+          model_parameters: {
+            model: 'gemini-3-pro-image-preview',
+          },
+        },
+      },
+      abortController: { signal: {} },
+      config: {},
+    };
+    const res = { end: jest.fn() };
+
+    await generateOpenAIImage(req, res);
+
+    expect(generateImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'make it night time',
+        model: 'gemini-3-pro-image-preview',
+        imageFiles: [
+          expect.objectContaining({
+            file_id: 'google-generated-source-1',
+            filename: 'google-generated-source-1.png',
+            buffer: expect.any(Buffer),
+          }),
+        ],
+      }),
+      req.abortController,
+    );
+    expect(saveImageGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationType: 'edit',
+        sourceImageFileIds: ['google-generated-source-1'],
         sourceImageCount: 1,
       }),
     );

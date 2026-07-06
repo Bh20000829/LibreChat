@@ -10,7 +10,11 @@ const {
 } = require('librechat-data-provider');
 const sharp = require('sharp');
 const { saveMessage, saveConvo, getFiles } = require('~/models');
-const { saveImageGeneration, saveImageGenerationUsage } = require('~/models/ImageGenerationStore');
+const {
+  saveImageGeneration,
+  saveImageGenerationUsage,
+  ImageGeneration,
+} = require('~/models/ImageGenerationStore');
 const { checkBalance } = require('~/models/balanceMethods');
 const { calculateUsageCostCny, calculateImageUsageCostCny } = require('~/models/pricingUtils');
 const { incrementQuotaUsage } = require('~/models/quotaUsage');
@@ -376,8 +380,15 @@ function getRequestedFileIds(files) {
     .filter((fileId) => typeof fileId === 'string' && fileId.length > 0);
 }
 
-async function resolveSourceImages(req, files) {
-  const fileIds = getRequestedFileIds(files);
+function isPreviousImageInheritanceEnabled() {
+  const value = String(process.env.IMAGE_AUTO_INHERIT_PREVIOUS ?? 'true')
+    .trim()
+    .toLowerCase();
+
+  return !['false', '0', 'off', 'no'].includes(value);
+}
+
+async function resolveImageFilesByIds(req, fileIds, notFoundMessage) {
   if (fileIds.length === 0) {
     return [];
   }
@@ -404,7 +415,7 @@ async function resolveSourceImages(req, files) {
     const file = storedFileMap.get(fileId);
 
     if (!file || !file.type?.startsWith('image/')) {
-      throw new Error(`Referenced image not found for editing: ${fileId}`);
+      throw new Error(`${notFoundMessage}: ${fileId}`);
     }
 
     const source = file.source ?? FileSources.local;
@@ -424,6 +435,72 @@ async function resolveSourceImages(req, files) {
   }
 
   return resolvedFiles;
+}
+
+async function resolveSourceImages(req, files) {
+  const fileIds = getRequestedFileIds(files);
+  return resolveImageFilesByIds(req, fileIds, 'Referenced image not found for editing');
+}
+
+function getGeneratedFileIdsFromRecord(record) {
+  const data = record?.providerResponse?.data;
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  return data
+    .map((item) => item?.file_id)
+    .filter((fileId) => typeof fileId === 'string' && fileId.length > 0);
+}
+
+async function resolveInheritedSourceImages({ req, conversationId, responseMessageId }) {
+  if (!isPreviousImageInheritanceEnabled() || !conversationId) {
+    return [];
+  }
+
+  const query = {
+    user: req.user.id,
+    conversationId,
+    imageCount: { $gt: 0 },
+  };
+
+  if (responseMessageId) {
+    query.responseMessageId = { $ne: responseMessageId };
+  }
+
+  const latestGeneration = await ImageGeneration.findOne(query)
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .lean();
+  const fileIds = getGeneratedFileIdsFromRecord(latestGeneration);
+
+  if (fileIds.length === 0) {
+    return [];
+  }
+
+  let inheritedImages = [];
+  try {
+    inheritedImages = await resolveImageFilesByIds(
+      req,
+      fileIds.slice(0, 16),
+      'Inherited image not found for editing',
+    );
+  } catch (error) {
+    logger.warn('[Image Controller] Failed to inherit previous generated image(s)', {
+      conversationId,
+      responseMessageId,
+      fileIds,
+      error: error.message,
+    });
+    return [];
+  }
+
+  logger.info('[Image Controller] Inherited previous generated image(s)', {
+    conversationId,
+    responseMessageId,
+    sourceImageFileIds: inheritedImages.map((file) => file.file_id),
+  });
+
+  return inheritedImages;
 }
 
 async function getGeneratedImageBuffer(item) {
@@ -695,7 +772,14 @@ async function generateOpenAIImage(req, res) {
     });
 
     const providerStartedAt = Date.now();
-    const sourceImages = await resolveSourceImages(req, req.body.files);
+    let sourceImages = await resolveSourceImages(req, req.body.files);
+    if (sourceImages.length === 0 && !newConvo) {
+      sourceImages = await resolveInheritedSourceImages({
+        req,
+        conversationId,
+        responseMessageId,
+      });
+    }
     const operationType = sourceImages.length > 0 ? 'edit' : 'generation';
     const initializeClient = getInitializeClient(endpoint);
     const imageReverseProxyUrl = resolveImageReverseProxy(endpoint);
