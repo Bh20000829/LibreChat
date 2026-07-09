@@ -8,6 +8,7 @@ const defaultConfig: TEndpointsConfig = {
   [EModelEndpoint.assistants]: null,
   [EModelEndpoint.agents]: null,
   [EModelEndpoint.openAI]: null,
+  [EModelEndpoint.doubao]: null,
   [EModelEndpoint.chatGPTBrowser]: null,
   [EModelEndpoint.gptPlugins]: null,
   [EModelEndpoint.google]: null,

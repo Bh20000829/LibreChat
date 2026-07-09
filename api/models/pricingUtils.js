@@ -18,10 +18,10 @@ const roundMoney = (value) =>
   Math.round((safeNumber(value) + Number.EPSILON) * 100000000) / 100000000;
 
 const getImageBillingMode = () => {
-  const mode = String(process.env.IMAGE_BILLING_MODE || '')
+  const mode = String(process.env.IMAGE_BILLING_MODE || 'request')
     .trim()
     .toLowerCase();
-  return mode === 'request' ? 'request' : 'token';
+  return mode === 'token' ? 'token' : 'request';
 };
 
 const getEffectivePricing = async ({ model, endpoint, valueKey, endpointTokenConfig }) => {
@@ -123,7 +123,6 @@ const getImageEffectivePricing = async ({ model }) => {
       'textInputPrice cachePrice textOutputPrice imageInputPrice imageOutputPrice requestPrice multiplier',
     )
     .lean();
-
   if (!custom) {
     return null;
   }
@@ -147,6 +146,20 @@ const calculateImageUsageCostCny = async ({
   endpointTokenConfig,
   generatedCount = 1,
 }) => {
+  void valueKey;
+  void endpointTokenConfig;
+  void generatedCount;
+  void endpoint;
+
+  const imagePricing = await getImageEffectivePricing({ model });
+  if (!imagePricing) {
+    return 0;
+  }
+
+  if (getImageBillingMode() === 'request') {
+    return roundMoney(imagePricing.requestPriceCnyPerRequest);
+  }
+
   const inputTokens = Math.max(0, Math.floor(safeNumber(usage.input_tokens)));
   const outputTokens = Math.max(0, Math.floor(safeNumber(usage.output_tokens)));
   const cacheTokens = Math.max(0, Math.floor(safeNumber(usage.cached_content_tokens)));
@@ -156,28 +169,7 @@ const calculateImageUsageCostCny = async ({
 
   const inputTextTokens = Math.max(0, inputTokens - inputImageTokens);
   const outputTextTokens = Math.max(0, outputTokens - outputImageTokens);
-
-  const imagePricing = await getImageEffectivePricing({ model });
-  if (!imagePricing) {
-    return calculateUsageCostCny({
-      inputTokens,
-      outputTokens,
-      cacheTokens,
-      model,
-      endpoint,
-      valueKey,
-      endpointTokenConfig,
-    });
-  }
-
-  const imageBillingMode = getImageBillingMode();
   const usdToCnyRate = getUsdToCnyRate();
-  if (imageBillingMode === 'request') {
-    const count = Math.max(0, Math.floor(safeNumber(generatedCount)));
-    const usageCny = count * imagePricing.requestPriceCnyPerRequest;
-    return roundMoney(usageCny);
-  }
-
   const usageUsd =
     ((inputTextTokens * imagePricing.textInputPriceUsdPer1M +
       cacheTokens * imagePricing.cachePriceUsdPer1M +

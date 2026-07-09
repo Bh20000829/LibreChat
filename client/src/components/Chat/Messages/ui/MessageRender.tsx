@@ -13,8 +13,8 @@ import { Plugin } from '~/components/Messages/Content';
 import SubRow from '~/components/Chat/Messages/SubRow';
 import { fontSizeAtom } from '~/store/fontSize';
 import { MessageContext } from '~/Providers';
-import { useMessageActions } from '~/hooks';
-import { cn, logger } from '~/utils';
+import { useLocalize, useMessageActions } from '~/hooks';
+import { cn } from '~/utils';
 import store from '~/store';
 
 type MessageRenderProps = {
@@ -52,7 +52,7 @@ const MessageRender = memo(
       latestMessage,
       handleContinue,
       copyToClipboard,
-      setLatestMessage,
+      selectMessageAsMainBranch,
       regenerateMessage,
       handleFeedback,
     } = useMessageActions({
@@ -63,6 +63,7 @@ const MessageRender = memo(
     });
     const fontSize = useAtomValue(fontSizeAtom);
     const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
+    const localize = useLocalize();
 
     const handleRegenerateMessage = useCallback(() => regenerateMessage(), [regenerateMessage]);
     const hasNoChildren = !(msg?.children?.length ?? 0);
@@ -101,20 +102,7 @@ const MessageRender = memo(
       ],
     );
 
-    const clickHandler = useMemo(
-      () =>
-        showCardRender && !isLatestMessage
-          ? () => {
-              logger.log(
-                'latest_message',
-                `Message Card click: Setting ${msg?.messageId} as latest message`,
-              );
-              logger.dir(msg);
-              setLatestMessage(msg!);
-            }
-          : undefined,
-      [showCardRender, isLatestMessage, msg, setLatestMessage],
-    );
+    const showKeepBranchButton = showCardRender && isCard && msg?.isCreatedByUser !== true;
 
     if (!msg) {
       return null;
@@ -130,7 +118,6 @@ const MessageRender = memo(
 
     const conditionalClasses = {
       latestCard: isLatestCard ? 'bg-surface-secondary' : '',
-      cardRender: showCardRender ? 'cursor-pointer transition-colors duration-300' : '',
       focus: 'focus:outline-none focus:ring-2 focus:ring-border-xheavy',
     };
 
@@ -142,18 +129,9 @@ const MessageRender = memo(
           baseClasses.common,
           isCard ? baseClasses.card : baseClasses.chat,
           conditionalClasses.latestCard,
-          conditionalClasses.cardRender,
           conditionalClasses.focus,
           'message-render',
         )}
-        onClick={clickHandler}
-        onKeyDown={(e) => {
-          if ((e.key === 'Enter' || e.key === ' ') && clickHandler) {
-            clickHandler();
-          }
-        }}
-        role={showCardRender ? 'button' : undefined}
-        tabIndex={showCardRender ? 0 : undefined}
       >
         {isLatestCard && (
           <div className="absolute right-0 top-0 m-2 h-3 w-3 rounded-full bg-text-primary" />
@@ -229,8 +207,19 @@ const MessageRender = memo(
                   handleContinue={handleContinue}
                   latestMessage={latestMessage}
                   handleFeedback={handleFeedback}
+                  isBranchComparison={isCard}
                   isLast={isLast}
                 />
+                {showKeepBranchButton && (
+                  <button
+                    type="button"
+                    onClick={selectMessageAsMainBranch}
+                    title={localize('com_ui_keep_branch')}
+                    className="rounded-lg px-2 py-1 text-text-secondary-alt transition-colors hover:bg-surface-hover hover:text-text-primary"
+                  >
+                    {localize('com_ui_keep_branch')}
+                  </button>
+                )}
               </SubRow>
             )}
           </div>

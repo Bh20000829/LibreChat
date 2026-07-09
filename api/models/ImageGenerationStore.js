@@ -34,7 +34,10 @@ async function saveImageGenerationUsage(data) {
 
 async function getFavoriteImageGenerations(user) {
   try {
-    return await ImageGeneration.find({ user, isFavorite: true })
+    return await ImageGeneration.find({
+      user,
+      $or: [{ isFavorite: true }, { 'favoriteImages.0': { $exists: true } }],
+    })
       .sort({ favoritedAt: -1, updatedAt: -1 })
       .lean();
   } catch (error) {
@@ -43,8 +46,37 @@ async function getFavoriteImageGenerations(user) {
   }
 }
 
-async function setImageGenerationFavorite({ user, responseMessageId, isFavorite, favoritedAt }) {
+async function setImageGenerationFavorite({
+  user,
+  responseMessageId,
+  imagePath,
+  isFavorite,
+  favoritedAt,
+}) {
   try {
+    if (imagePath) {
+      const doc = await ImageGeneration.findOne({ user, responseMessageId });
+      if (!doc) {
+        return null;
+      }
+
+      const existingFavorite = doc.favoriteImages.find((item) => item.imagePath === imagePath);
+      if (isFavorite && existingFavorite) {
+        existingFavorite.favoritedAt = favoritedAt ?? Date.now();
+      } else if (isFavorite) {
+        doc.favoriteImages.push({ imagePath, favoritedAt: favoritedAt ?? Date.now() });
+      } else {
+        doc.favoriteImages = doc.favoriteImages.filter((item) => item.imagePath !== imagePath);
+      }
+
+      if (isFavorite) {
+        doc.favoritedAt = favoritedAt ?? Date.now();
+      }
+
+      await doc.save();
+      return doc.toObject();
+    }
+
     return await ImageGeneration.findOneAndUpdate(
       { user, responseMessageId },
       {

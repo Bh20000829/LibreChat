@@ -288,7 +288,7 @@ const AgentController = async (req, res, next, initializeClient, addTitle) => {
     }
 
     // Add title if needed - extract minimal data
-    if (addTitle && parentMessageId === Constants.NO_PARENT && newConvo) {
+    if (addTitle && !client.skipSaveConvo && parentMessageId === Constants.NO_PARENT && newConvo) {
       addTitle(req, {
         text,
         response: { ...response },

@@ -46,39 +46,48 @@ const FileAttachment = memo(({ attachment }: { attachment: Partial<TAttachment> 
   );
 });
 
-const ImageAttachment = memo(({ attachment }: { attachment: TAttachment }) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const { width, height, filepath = null } = attachment as TFile & TAttachmentMetadata;
+const ImageAttachment = memo(
+  ({
+    attachment,
+    displaySize = 'default',
+  }: {
+    attachment: TAttachment;
+    displaySize?: 'default' | 'thumbnail';
+  }) => {
+    const [isLoaded, setIsLoaded] = useState(false);
+    const { width, height, filepath = null } = attachment as TFile & TAttachmentMetadata;
 
-  useEffect(() => {
-    setIsLoaded(false);
-    const timer = setTimeout(() => setIsLoaded(true), 100);
-    return () => clearTimeout(timer);
-  }, [attachment]);
+    useEffect(() => {
+      setIsLoaded(false);
+      const timer = setTimeout(() => setIsLoaded(true), 100);
+      return () => clearTimeout(timer);
+    }, [attachment]);
 
-  return (
-    <div
-      className={cn(
-        'image-attachment-container',
-        'transition-all duration-500 ease-out',
-        isLoaded ? 'scale-100 opacity-100' : 'scale-[0.98] opacity-0',
-      )}
-      style={{
-        transformOrigin: 'center top',
-        willChange: 'opacity, transform',
-        WebkitFontSmoothing: 'subpixel-antialiased',
-      }}
-    >
-      <Image
-        altText={attachment.filename || 'attachment image'}
-        imagePath={filepath ?? ''}
-        height={height ?? 0}
-        width={width ?? 0}
-        className="mb-4"
-      />
-    </div>
-  );
-});
+    return (
+      <div
+        className={cn(
+          'image-attachment-container',
+          'transition-all duration-500 ease-out',
+          isLoaded ? 'scale-100 opacity-100' : 'scale-[0.98] opacity-0',
+        )}
+        style={{
+          transformOrigin: 'center top',
+          willChange: 'opacity, transform',
+          WebkitFontSmoothing: 'subpixel-antialiased',
+        }}
+      >
+        <Image
+          altText={attachment.filename || 'attachment image'}
+          imagePath={filepath ?? ''}
+          height={height ?? 0}
+          width={width ?? 0}
+          displaySize={displaySize}
+          className="mb-4"
+        />
+      </div>
+    );
+  },
+);
 
 export default function Attachment({ attachment }: { attachment?: TAttachment }) {
   if (!attachment) {
@@ -137,9 +146,13 @@ export function AttachmentGroup({ attachments }: { attachments?: TAttachment[] }
         </div>
       )}
       {imageAttachments.length > 0 && (
-        <div className="mb-2 flex flex-wrap items-center">
+        <div className="mb-2 flex flex-wrap items-start gap-3">
           {imageAttachments.map((attachment, index) => (
-            <ImageAttachment attachment={attachment} key={`image-${index}`} />
+            <ImageAttachment
+              attachment={attachment}
+              displaySize={imageAttachments.length > 1 ? 'thumbnail' : 'default'}
+              key={`image-${index}`}
+            />
           ))}
         </div>
       )}

@@ -16,7 +16,7 @@ const appendIndex = (index: number, value?: string) => {
 export default function useSubmitMessage() {
   const { user } = useAuthContext();
   const methods = useChatFormContext();
-  const { ask, index, getMessages, setMessages, latestMessage } = useChatContext();
+  const { ask, index, conversation, getMessages, setMessages, latestMessage } = useChatContext();
   const { addedIndex, ask: askAdditional, conversation: addedConvo } = useAddedChatContext();
 
   const autoSendPrompts = useRecoilValue(store.autoSendPrompts);
@@ -54,6 +54,16 @@ export default function useSubmitMessage() {
       });
 
       if (hasAdded) {
+        const sharedImageOptions =
+          conversation?.mode === 'image'
+            ? {
+                mode: conversation.mode,
+                imageSize: conversation.imageSize,
+                imageResolution: conversation.imageResolution,
+                imageMaxImages: conversation.imageMaxImages,
+                inheritPreviousImage: conversation.inheritPreviousImage,
+              }
+            : {};
         askAdditional(
           {
             text: data.text,
@@ -61,7 +71,13 @@ export default function useSubmitMessage() {
             overrideUserMessageId: appendIndex(addedIndex, overrideUserMessageId),
             clientTimestamp,
           },
-          { overrideMessages: rootMessages },
+          {
+            overrideMessages: rootMessages,
+            overrideConversation: {
+              ...addedConvo,
+              ...sharedImageOptions,
+            },
+          },
         );
       }
       methods.reset();
@@ -71,6 +87,7 @@ export default function useSubmitMessage() {
       methods,
       addedIndex,
       addedConvo,
+      conversation,
       setMessages,
       getMessages,
       activeConvos,

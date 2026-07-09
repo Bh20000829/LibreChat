@@ -151,6 +151,11 @@ const MessageEndpointIcon: React.FC<IconProps> = (props) => {
       icon: getGoogleIcon(model, size),
       name: getGoogleModelName(model),
     },
+    [EModelEndpoint.doubao]: {
+      icon: <Feather size={size * 0.5555555555555556} />,
+      bg: '#111827',
+      name: alternateName[EModelEndpoint.doubao],
+    },
     [EModelEndpoint.anthropic]: {
       icon: <AnthropicIcon size={size * 0.5555555555555556} />,
       bg: '#d09a74',

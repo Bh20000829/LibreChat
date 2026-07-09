@@ -40,9 +40,23 @@ const endpointPrefix =
 const settings = endpointSettings[EModelEndpoint.google];
 const EXCLUDED_GENAI_MODELS = /gemini-(?:1\.0|1-0|pro)/;
 const GOOGLE_IMAGE_ASPECT_RATIO_PATTERN = /^\d+:\d+$/;
-const GOOGLE_IMAGE_RESOLUTIONS = new Set(['512', '1K', '2K', '4K']);
+const GOOGLE_IMAGE_SIZE_PATTERN = /^[124]K$/i;
+const GOOGLE_IMAGE_SIZE_SUPPORTED_MODEL_PATTERN =
+  /^gemini-(?:3\.1-flash-image|3-pro-image)$/i;
+const DEFAULT_GOOGLE_IMAGE_SIZE = '2K';
 
-function getGoogleImageConfig(size) {
+function getGreatestCommonDivisor(a, b) {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y) {
+    const t = y;
+    y = x % y;
+    x = t;
+  }
+  return x || 1;
+}
+
+function getGoogleImageAspectRatio(size) {
   if (typeof size !== 'string') {
     return undefined;
   }
@@ -53,22 +67,46 @@ function getGoogleImageConfig(size) {
   }
 
   if (GOOGLE_IMAGE_ASPECT_RATIO_PATTERN.test(normalizedSize)) {
-    return {
-      aspectRatio: normalizedSize,
-    };
+    return normalizedSize;
   }
 
-  const normalizedResolution = normalizedSize.toUpperCase();
-  if (GOOGLE_IMAGE_RESOLUTIONS.has(normalizedResolution)) {
-    return {
-      imageSize: normalizedResolution,
-    };
+  const dimensionMatch = normalizedSize.match(/^(\d+)x(\d+)$/i);
+  if (dimensionMatch) {
+    const width = Number(dimensionMatch[1]);
+    const height = Number(dimensionMatch[2]);
+    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+      const divisor = getGreatestCommonDivisor(width, height);
+      return `${width / divisor}:${height / divisor}`;
+    }
   }
 
   return undefined;
 }
 
-function buildGoogleImageRequest({ prompt, imageFiles, generationConfig, promptPrefix }) {
+function getGoogleImageSize({ model, size, imageSize, image_size } = {}) {
+  if (
+    typeof model !== 'string' ||
+    !GOOGLE_IMAGE_SIZE_SUPPORTED_MODEL_PATTERN.test(model.trim())
+  ) {
+    return undefined;
+  }
+
+  const candidates = [imageSize, image_size, size];
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') {
+      continue;
+    }
+
+    const normalizedSize = candidate.trim().toUpperCase();
+    if (GOOGLE_IMAGE_SIZE_PATTERN.test(normalizedSize)) {
+      return normalizedSize;
+    }
+  }
+
+  return DEFAULT_GOOGLE_IMAGE_SIZE;
+}
+
+function buildGoogleImageRequest({ prompt, imageFiles, aspectRatio, imageSize, promptPrefix }) {
   const parts = [{ text: prompt.trim() }];
   for (const imageFile of imageFiles) {
     if (!imageFile?.buffer || !imageFile?.type?.startsWith('image/')) {
@@ -76,12 +114,22 @@ function buildGoogleImageRequest({ prompt, imageFiles, generationConfig, promptP
     }
 
     parts.push({
-      inlineData: {
-        mimeType: imageFile.type,
+      inline_data: {
+        mime_type: imageFile.type,
         data: imageFile.buffer.toString('base64'),
       },
     });
   }
+
+  const generationConfig = {
+    responseModalities: ['TEXT', 'IMAGE'],
+    responseFormat: {
+      image: {
+        ...(aspectRatio ? { aspectRatio } : {}),
+        ...(imageSize ? { imageSize } : {}),
+      },
+    },
+  };
 
   const requestOptions = {
     contents: [{ role: 'user', parts }],
@@ -98,14 +146,13 @@ function buildGoogleImageRequest({ prompt, imageFiles, generationConfig, promptP
   return requestOptions;
 }
 
-function shouldRetryWithoutImageConfig(errorText) {
-  if (typeof errorText !== 'string' || errorText.length === 0) {
-    return false;
+function getGoogleGenerateContentUrl(baseUrl, model) {
+  const normalized = baseUrl.replace(/\/$/, '');
+  if (/\/v1(?:beta)?$/i.test(normalized)) {
+    return `${normalized}/models/${model}:generateContent`;
   }
 
-  return /imageconfig|unknown name .*imageconfig|unknown field .*imageconfig|cannot find field .*imageconfig/i.test(
-    errorText,
-  );
+  return `${normalized}/v1/models/${model}:generateContent`;
 }
 
 function normalizeChatContent(content) {
@@ -810,10 +857,6 @@ class GoogleClient extends BaseClient {
           signal: abortController.signal,
         });
         for await (const chunk of result.stream) {
-          // LC_DEBUG_RAW_RESPONSE_DELETE_ME
-          console.log('[LC_DEBUG_RAW_RESPONSE_DELETE_ME][google][genai_stream_chunk]', {
-            data: chunk,
-          });
           usageMetadata = !usageMetadata
             ? chunk?.usageMetadata
             : Object.assign(usageMetadata, chunk?.usageMetadata);
@@ -864,10 +907,6 @@ class GoogleClient extends BaseClient {
       }
 
       for await (const chunk of stream) {
-        // LC_DEBUG_RAW_RESPONSE_DELETE_ME
-        console.log('[LC_DEBUG_RAW_RESPONSE_DELETE_ME][google][vertex_stream_chunk]', {
-          data: chunk,
-        });
         if (chunk?.usage_metadata) {
           const metadata = chunk.usage_metadata;
           for (const key in metadata) {
@@ -916,32 +955,27 @@ class GoogleClient extends BaseClient {
       abortController = new AbortController();
     }
 
-    const { prompt, model, imageFiles = [], n = 1, size: _size } = params;
+    const {
+      prompt,
+      model,
+      imageFiles = [],
+      size: _size,
+      imageSize,
+      image_size,
+      onProviderRequest,
+      onProviderResponse,
+    } = params;
 
     if (!prompt?.trim()) {
       throw new Error('Prompt is required for Google image generation');
     }
 
     const modelName = model ?? this.modelOptions.model ?? '';
-    const generationConfig = {
-      ...googleGenConfigSchema.parse(this.modelOptions),
-      candidateCount: Math.min(Math.max(Number(n) || 1, 1), 1),
-      responseModalities: ['Image'],
-    };
-
     const promptPrefix = (this.systemMessage ?? '').trim();
-    const imageConfig = getGoogleImageConfig(_size);
-    if (imageConfig) {
-      generationConfig.imageConfig = imageConfig;
-    }
-
-    let requestOptions = buildGoogleImageRequest({
-      prompt,
-      imageFiles,
-      generationConfig,
-      promptPrefix,
-    });
-
+    const baseUrl = (this.reverseProxyUrl || 'https://generativelanguage.googleapis.com').replace(
+      /\/$/,
+      '',
+    );
     const headers = {
       'Content-Type': 'application/json',
       Accept: 'application/json',
@@ -953,11 +987,35 @@ class GoogleClient extends BaseClient {
       headers['x-goog-api-key'] = this.apiKey;
     }
 
-    const baseUrl = (this.reverseProxyUrl || 'https://generativelanguage.googleapis.com').replace(
-      /\/$/,
-      '',
-    );
-    let response = await this.fetch(`${baseUrl}/v1beta/models/${modelName}:generateContent`, {
+    const url = getGoogleGenerateContentUrl(baseUrl, modelName);
+    const requestOptions = buildGoogleImageRequest({
+      prompt,
+      imageFiles,
+      aspectRatio: getGoogleImageAspectRatio(_size),
+      imageSize: getGoogleImageSize({ model: modelName, size: _size, imageSize, image_size }),
+      promptPrefix,
+    });
+    const providerRequestLog = {
+      provider: 'google',
+      url,
+      method: 'POST',
+      headers,
+      body: requestOptions,
+    };
+    const emitProviderRequest = () => {
+      // console.log('[AI接口请求内容]', JSON.stringify(providerRequestLog, null, 2));
+      onProviderRequest?.(providerRequestLog);
+    };
+    const emitProviderResponse = (data) => {
+      // console.log(
+      //   '[AI接口返回内容]',
+      //   typeof data === 'string' ? data : JSON.stringify(data, null, 2),
+      // );
+      onProviderResponse?.(data);
+    };
+
+    emitProviderRequest();
+    let response = await this.fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(requestOptions),
@@ -966,44 +1024,21 @@ class GoogleClient extends BaseClient {
 
     if (!response.ok) {
       const errorText = await response.text();
-      if (imageConfig && shouldRetryWithoutImageConfig(errorText)) {
-        logger.warn('[GoogleClient] Retrying image generation without imageConfig', {
-          model: modelName,
-          size: _size,
-          reverseProxyUrl: this.reverseProxyUrl,
-        });
-
-        delete generationConfig.imageConfig;
-        requestOptions = buildGoogleImageRequest({
-          prompt,
-          imageFiles,
-          generationConfig,
-          promptPrefix,
-        });
-
-        response = await this.fetch(`${baseUrl}/v1beta/models/${modelName}:generateContent`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(requestOptions),
-          signal: abortController.signal,
-        });
-      } else {
-        throw new Error(
-          `[GoogleGenerativeAI Error]: Error fetching from ${baseUrl}/v1beta/models/${modelName}:generateContent: ` +
-            `[${response.status} ${response.statusText}] ${errorText}`,
-        );
-      }
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
+      emitProviderResponse({
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+      });
       throw new Error(
-        `[GoogleGenerativeAI Error]: Error fetching from ${baseUrl}/v1beta/models/${modelName}:generateContent: ` +
+        `[GoogleGenerativeAI Error]: Error fetching from ${url}: ` +
           `[${response.status} ${response.statusText}] ${errorText}`,
       );
     }
 
-    return await response.json();
+    const rawResponse = await response.text();
+    emitProviderResponse(rawResponse);
+
+    return rawResponse ? JSON.parse(rawResponse) : {};
   }
 
   getMessageMapMethod() {

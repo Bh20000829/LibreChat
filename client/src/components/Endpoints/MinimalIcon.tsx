@@ -35,6 +35,10 @@ const MinimalIcon: React.FC<IconProps> = (props) => {
     },
     [EModelEndpoint.gptPlugins]: { icon: <MinimalPlugin />, name: 'Plugins' },
     [EModelEndpoint.google]: { icon: <GoogleMinimalIcon />, name: props.modelLabel ?? 'Google' },
+    [EModelEndpoint.doubao]: {
+      icon: <Sparkles className="icon-sm" />,
+      name: props.modelLabel ?? 'Doubao',
+    },
     [EModelEndpoint.anthropic]: {
       icon: <AnthropicIcon className="icon-md shrink-0 dark:text-white" />,
       name: props.modelLabel ?? 'Claude',

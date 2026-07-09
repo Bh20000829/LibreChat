@@ -5,7 +5,6 @@ import { useSetRecoilState } from 'recoil';
 import {
   request,
   Constants,
-  EModelEndpoint,
   /* @ts-ignore */
   createPayload,
   LocalStorageKeys,
@@ -43,59 +42,14 @@ type ChatHelpers = Pick<
   | 'resetLatestMessage'
 >;
 
-const logOpenAIImageRequest = ({
-  server,
-  payload,
-  submission,
-}: {
-  server: string;
-  payload: TPayload;
-  submission: TSubmission;
-}) => {
-  const endpoint = submission.endpointOption?.endpoint;
-  const mode = submission.conversation?.mode;
-
-  if (endpoint !== EModelEndpoint.openAI || mode !== 'image') {
-    return;
-  }
-
-  const providerPayload = {
-    prompt: submission.userMessage?.text?.trim() ?? '',
-    model:
-      (submission.endpointOption?.model_parameters?.model as string | undefined) ??
-      submission.conversation?.model ??
-      '',
-    ...(submission.endpointOption?.model_parameters ?? {}),
-  };
-
-  console.groupCollapsed('[OpenAI Image Request] Browser -> LibreChat');
-  console.log({
-    method: 'POST',
-    url: server,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer <redacted>',
-    },
-    body: payload,
-  });
-  console.groupEnd();
-
-  console.groupCollapsed('[OpenAI Image Request] LibreChat -> OpenAI preview');
-  console.log({
-    method: 'POST',
-    url: '/v1/images/generations',
-    body: providerPayload,
-  });
-  console.groupEnd();
-};
-
 export default function useSSE(
   submission: TSubmission | null,
   chatHelpers: ChatHelpers,
   isAddedRequest = false,
   runIndex = 0,
 ) {
-  const genTitle = useGenTitleMutation();
+  const genTitleMutation = useGenTitleMutation();
+  const genTitle = isAddedRequest ? undefined : genTitleMutation;
   const setActiveRunId = useSetRecoilState(store.activeRunFamily(runIndex));
 
   const { token, isAuthenticated } = useAuthContext();
@@ -151,11 +105,6 @@ export default function useSSE(
     const payloadData = createPayload(submission);
     let { payload } = payloadData;
     payload = removeNullishValues(payload) as TPayload;
-    logOpenAIImageRequest({
-      server: payloadData.server,
-      payload,
-      submission,
-    });
 
     let textIndex = null;
     clearStepMaps();
@@ -169,20 +118,28 @@ export default function useSSE(
       try {
         const data = JSON.parse(e.data);
         attachmentHandler({ data, submission: submission as EventSubmission });
-      } catch (error) {
-        console.error(error);
+      } catch {
+        return;
       }
     });
 
     sse.addEventListener('message', (e: MessageEvent) => {
       const data = JSON.parse(e.data);
 
+      if (data.event === 'ai_provider_debug') {
+        if (data.type === 'request') {
+          // console.log('[AI接口请求内容]', data.data);
+        } else if (data.type === 'response') {
+          // console.log('[AI接口返回内容]', data.data);
+        }
+        return;
+      }
+
       if (data.final != null) {
         clearDraft(submission.conversation?.conversationId);
         const { plugins } = data;
         finalHandler(data, { ...submission, plugins } as EventSubmission);
         (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
-        console.log('final', data);
         return;
       } else if (data.created != null) {
         const runId = v4();
@@ -226,7 +183,6 @@ export default function useSSE(
 
     sse.addEventListener('open', () => {
       setAbortScroll(false);
-      console.log('connection is opened');
     });
 
     sse.addEventListener('cancel', async () => {
@@ -271,21 +227,17 @@ export default function useSSE(
           request.dispatchTokenUpdatedEvent(token);
           sse.stream();
           return;
-        } catch (error) {
+        } catch {
           /* token refresh failed, continue handling the original 401 */
-          console.log(error);
         }
       }
 
-      console.log('error in server stream.');
       (startupConfig?.balance?.enabled ?? false) && balanceQuery.refetch();
 
       let data: TResData | undefined = undefined;
       try {
         data = JSON.parse(e.data) as TResData;
-      } catch (error) {
-        console.error(error);
-        console.log(e);
+      } catch {
         setIsSubmitting(false);
       }
 

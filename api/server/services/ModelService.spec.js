@@ -7,17 +7,17 @@ const {
   splitAndTrim,
   getOpenAIModels,
   getGoogleModels,
+  getDoubaoModels,
   getBedrockModels,
   getAnthropicModels,
 } = require('./ModelService');
 
 jest.mock('@librechat/api', () => {
-  const originalUtils = jest.requireActual('@librechat/api');
   return {
-    ...originalUtils,
-    processModelData: jest.fn((...args) => {
-      return originalUtils.processModelData(...args);
-    }),
+    inputSchema: {
+      safeParse: jest.fn(() => ({ success: true })),
+    },
+    processModelData: jest.fn((data) => data),
     logAxiosError: jest.fn(),
     resolveHeaders: jest.fn((options) => options?.headers || {}),
   };
@@ -31,9 +31,11 @@ jest.mock('~/cache/getLogStores', () =>
   })),
 );
 jest.mock('@librechat/data-schemas', () => ({
-  ...jest.requireActual('@librechat/data-schemas'),
   logger: {
+    debug: jest.fn(),
     error: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
   },
 }));
 jest.mock('./Config/EndpointService', () => ({
@@ -568,6 +570,35 @@ describe('getGoogleModels', () => {
     process.env.GOOGLE_MODELS = 'gemini-pro, bard ';
     const models = getGoogleModels();
     expect(models).toEqual(['gemini-pro', 'bard']);
+  });
+});
+
+describe('getDoubaoModels', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('returns no models in chat mode', () => {
+    const models = getDoubaoModels({ mode: 'chat' });
+    expect(models).toEqual([]);
+  });
+
+  it('returns image models in image mode', () => {
+    delete process.env.DOUBAO_IMAGE_MODELS;
+    const models = getDoubaoModels({ mode: 'image' });
+    expect(models).toEqual(defaultModels[EModelEndpoint.doubao]);
+  });
+
+  it('returns image-scoped env models in image mode', () => {
+    process.env.DOUBAO_IMAGE_MODELS = 'doubao-test-1, doubao-test-2';
+    const models = getDoubaoModels({ mode: 'image' });
+    expect(models).toEqual(['doubao-test-1', 'doubao-test-2']);
   });
 });
 

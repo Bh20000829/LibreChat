@@ -67,6 +67,7 @@ export const icons: IconsRecord = {
   [EModelEndpoint.anthropic]: AnthropicIcon,
   [EModelEndpoint.chatGPTBrowser]: LightningIcon,
   [EModelEndpoint.google]: GoogleMinimalIcon,
+  [EModelEndpoint.doubao]: Sparkles,
   [EModelEndpoint.custom]: CustomMinimalIcon,
   [EModelEndpoint.assistants]: AssistantAvatar,
   [EModelEndpoint.azureAssistants]: AssistantAvatar,

@@ -7,9 +7,11 @@ import { cn } from '~/utils';
 const AttachFile = ({
   disabled,
   isImageMode = false,
+  allowMultipleImages = false,
 }: {
   disabled?: boolean | null;
   isImageMode?: boolean;
+  allowMultipleImages?: boolean;
 }) => {
   const localize = useLocalize();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -29,7 +31,11 @@ const AttachFile = ({
   };
 
   return (
-    <FileUpload ref={inputRef} handleFileChange={handleFileChange} multiple={!isImageMode}>
+    <FileUpload
+      ref={inputRef}
+      handleFileChange={handleFileChange}
+      multiple={isImageMode ? allowMultipleImages : true}
+    >
       <TooltipAnchor
         description={
           isImageMode

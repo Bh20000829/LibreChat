@@ -19,6 +19,7 @@ export enum EModelEndpoint {
   azureOpenAI = 'azureOpenAI',
   openAI = 'openAI',
   google = 'google',
+  doubao = 'doubao',
   anthropic = 'anthropic',
   assistants = 'assistants',
   azureAssistants = 'azureAssistants',
@@ -37,6 +38,7 @@ export enum Providers {
   ANTHROPIC = 'anthropic',
   AZURE = 'azureOpenAI',
   GOOGLE = 'google',
+  DOUBAO = 'doubao',
   VERTEXAI = 'vertexai',
   BEDROCK = 'bedrock',
   MISTRALAI = 'mistralai',
@@ -56,6 +58,7 @@ export const documentSupportedProviders = new Set<string>([
   EModelEndpoint.custom,
   EModelEndpoint.azureOpenAI,
   EModelEndpoint.google,
+  EModelEndpoint.doubao,
   Providers.VERTEXAI,
   Providers.MISTRALAI,
   Providers.MISTRAL,
@@ -93,6 +96,7 @@ export const paramEndpoints = new Set<EModelEndpoint | string>([
   EModelEndpoint.anthropic,
   EModelEndpoint.custom,
   EModelEndpoint.google,
+  EModelEndpoint.doubao,
 ]);
 
 export enum BedrockProviders {
@@ -691,7 +695,10 @@ const DocumentType: z.ZodType<DocumentTypeValue> = z.lazy(() =>
 export const tConversationSchema = z.object({
   conversationId: z.string().nullable(),
   mode: z.enum(['chat', 'image']).default('chat').optional(),
-  imageSize: z.enum(['1:1', '16:9', '9:16', '4:3', '3:4']).optional(),
+  imageSize: z.enum(['auto', '1:1', '21:9', '16:9', '3:2', '4:3', '3:4', '2:3', '9:16']).optional(),
+  imageResolution: z.enum(['2K', '4K']).optional(),
+  imageMaxImages: z.coerce.number().int().min(1).max(4).optional(),
+  inheritPreviousImage: z.boolean().optional(),
   endpoint: eModelEndpointSchema.nullable(),
   endpointType: eModelEndpointSchema.nullable().optional(),
   isArchived: z.boolean().optional(),

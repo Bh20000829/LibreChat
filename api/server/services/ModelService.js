@@ -352,6 +352,25 @@ const getGoogleModels = (opts = {}) => {
   return models;
 };
 
+const getDoubaoModels = (opts = {}) => {
+  const mode = normalizeMode(opts.mode);
+  if (mode !== 'image') {
+    return [];
+  }
+
+  let models = defaultModels[EModelEndpoint.doubao] ?? [
+    'doubao-seedream-5-0-260128',
+    'doubao-seedream-4-5-251128',
+    'doubao-seedream-4-0-250828',
+  ];
+  const envModels = getModeScopedEnvModels({ key: 'DOUBAO_MODELS', mode });
+  if (envModels) {
+    models = envModels;
+  }
+
+  return models;
+};
+
 const getBedrockModels = (opts = {}) => {
   const mode = normalizeMode(opts.mode);
   let models = defaultModels[EModelEndpoint.bedrock];
@@ -368,6 +387,7 @@ module.exports = {
   splitAndTrim,
   getOpenAIModels,
   getBedrockModels,
+  getDoubaoModels,
   getChatGPTBrowserModels,
   getAnthropicModels,
   getGoogleModels,

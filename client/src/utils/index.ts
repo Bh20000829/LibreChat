@@ -13,6 +13,7 @@ export * from './presets';
 export * from './prompts';
 export * from './textarea';
 export * from './messages';
+export * from './imageMessages';
 export * from './languages';
 export * from './endpoints';
 export * from './resources';

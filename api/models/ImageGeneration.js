@@ -75,6 +75,15 @@ const imageGenerationSchema = new mongoose.Schema(
       type: Number,
       index: true,
     },
+    favoriteImages: {
+      type: [
+        {
+          imagePath: String,
+          favoritedAt: Number,
+        },
+      ],
+      default: [],
+    },
     providerResponse: {
       type: mongoose.Schema.Types.Mixed,
     },

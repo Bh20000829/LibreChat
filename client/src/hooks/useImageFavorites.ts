@@ -58,13 +58,20 @@ async function getImageFavorites(token?: string): Promise<TImageFavorite[]> {
   return Array.isArray(favorites) ? favorites.map(normalizeFavorite) : EMPTY_FAVORITES;
 }
 
-async function createImageFavorite({ favorite, token }: { favorite: TImageFavorite; token?: string }): Promise<TImageFavorite> {
+async function createImageFavorite({
+  favorite,
+  token,
+}: {
+  favorite: TImageFavorite;
+  token?: string;
+}): Promise<TImageFavorite> {
   const response = await fetch('/api/image-favorites', {
     method: 'POST',
     headers: createAuthHeaders(token),
     credentials: 'include',
     body: JSON.stringify({
       messageId: favorite.messageId,
+      imagePath: favorite.imagePath,
       favoritedAt: favorite.favoritedAt,
     }),
   });
@@ -76,7 +83,13 @@ async function createImageFavorite({ favorite, token }: { favorite: TImageFavori
   return normalizeFavorite((await response.json()) as TImageFavoriteApi);
 }
 
-async function removeImageFavorite({ favoriteId, token }: { favoriteId: string; token?: string }): Promise<void> {
+async function removeImageFavorite({
+  favoriteId,
+  token,
+}: {
+  favoriteId: string;
+  token?: string;
+}): Promise<void> {
   const response = await fetch(`/api/image-favorites/${encodeURIComponent(favoriteId)}`, {
     method: 'DELETE',
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -88,8 +101,8 @@ async function removeImageFavorite({ favoriteId, token }: { favoriteId: string; 
   }
 }
 
-export function getImageFavoriteId(messageId: string, _imagePath: string) {
-  return messageId;
+export function getImageFavoriteId(messageId: string, imagePath: string) {
+  return `${messageId}::${encodeURIComponent(imagePath)}`;
 }
 
 export default function useImageFavorites() {
@@ -123,7 +136,8 @@ export default function useImageFavorites() {
   const addMutation = useMutation(createImageFavorite, {
     onMutate: async ({ favorite }) => {
       await queryClient.cancelQueries(queryKey);
-      const previousFavorites = queryClient.getQueryData<TImageFavorite[]>(queryKey) ?? EMPTY_FAVORITES;
+      const previousFavorites =
+        queryClient.getQueryData<TImageFavorite[]>(queryKey) ?? EMPTY_FAVORITES;
 
       queryClient.setQueryData<TImageFavorite[]>(queryKey, (current = EMPTY_FAVORITES) => {
         if (current.some((item) => item.id === favorite.id)) {
@@ -142,14 +156,18 @@ export default function useImageFavorites() {
       });
     },
     onError: (_error, _favorite, context) => {
-      queryClient.setQueryData<TImageFavorite[]>(queryKey, context?.previousFavorites ?? EMPTY_FAVORITES);
+      queryClient.setQueryData<TImageFavorite[]>(
+        queryKey,
+        context?.previousFavorites ?? EMPTY_FAVORITES,
+      );
     },
   });
 
   const removeMutation = useMutation(removeImageFavorite, {
     onMutate: async ({ favoriteId }) => {
       await queryClient.cancelQueries(queryKey);
-      const previousFavorites = queryClient.getQueryData<TImageFavorite[]>(queryKey) ?? EMPTY_FAVORITES;
+      const previousFavorites =
+        queryClient.getQueryData<TImageFavorite[]>(queryKey) ?? EMPTY_FAVORITES;
 
       queryClient.setQueryData<TImageFavorite[]>(queryKey, (current = EMPTY_FAVORITES) =>
         current.filter((favorite) => favorite.id !== favoriteId),
@@ -163,39 +181,51 @@ export default function useImageFavorites() {
       );
     },
     onError: (_error, _favoriteId, context) => {
-      queryClient.setQueryData<TImageFavorite[]>(queryKey, context?.previousFavorites ?? EMPTY_FAVORITES);
+      queryClient.setQueryData<TImageFavorite[]>(
+        queryKey,
+        context?.previousFavorites ?? EMPTY_FAVORITES,
+      );
     },
   });
 
-  const addFavorite = useCallback(async (favorite: TImageFavorite) => {
-    if (!isAuthenticated || favoriteIds.has(favorite.id)) {
-      return;
-    }
+  const addFavorite = useCallback(
+    async (favorite: TImageFavorite) => {
+      if (!isAuthenticated || favoriteIds.has(favorite.id)) {
+        return;
+      }
 
-    await addMutation.mutateAsync({ favorite, token });
-  }, [addMutation, favoriteIds, isAuthenticated, token]);
+      await addMutation.mutateAsync({ favorite, token });
+    },
+    [addMutation, favoriteIds, isAuthenticated, token],
+  );
 
-  const removeFavorite = useCallback(async (id: string) => {
-    if (!isAuthenticated) {
-      return;
-    }
+  const removeFavorite = useCallback(
+    async (id: string) => {
+      if (!isAuthenticated) {
+        return;
+      }
 
-    await removeMutation.mutateAsync({ favoriteId: id, token });
-  }, [isAuthenticated, removeMutation, token]);
+      await removeMutation.mutateAsync({ favoriteId: id, token });
+    },
+    [isAuthenticated, removeMutation, token],
+  );
 
-  const toggleFavorite = useCallback(async (favorite: TImageFavorite) => {
-    if (!isAuthenticated) {
-      return false;
-    }
+  const toggleFavorite = useCallback(
+    async (favorite: TImageFavorite) => {
+      if (!isAuthenticated) {
+        return false;
+      }
 
-    if (favoriteIds.has(favorite.id)) {
-      await removeMutation.mutateAsync({ favoriteId: favorite.id, token });
-      return false;
-    }
+      if (favoriteIds.has(favorite.id)) {
+        await removeMutation.mutateAsync({ favoriteId: favorite.id, token });
+        return false;
+      }
 
-    await addMutation.mutateAsync({ favorite, token });
-    return true;
-  }, [addMutation, favoriteIds, isAuthenticated, removeMutation, token]);
+      await addMutation.mutateAsync({ favorite, token });
+      return true;
+    },
+    [addMutation, favoriteIds, isAuthenticated, removeMutation, token],
+  );
 
   return {
     favorites: sortedFavorites,

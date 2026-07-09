@@ -66,7 +66,7 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
   const [query, setQuery] = useState('');
   const [statusText, setStatusText] = useState('');
   const [busyRowKey, setBusyRowKey] = useState(null);
-  const [billingMode, setBillingMode] = useState('token');
+  const [billingMode, setBillingMode] = useState('request');
 
   const pricingQuery = useQuery({
     queryKey: ['image-model-pricing'],
@@ -82,7 +82,7 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
 
     const mappedRows = pricingQuery.data.records.map((row) => ({
       ...row,
-      billingMode: row.billingMode === 'request' ? 'request' : 'token',
+      billingMode: 'request',
       requestPrice: String(row.requestPrice ?? 0),
       textInputPrice: String(row.textInputPrice ?? 0),
       cachePrice: String(row.cachePrice ?? 0),
@@ -92,9 +92,7 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
       multiplier: String(row.multiplier ?? 1),
     }));
 
-    const inferredMode = mappedRows.some((row) => row.billingMode === 'request')
-      ? 'request'
-      : 'token';
+    const inferredMode = 'request';
 
     setBillingMode(inferredMode);
     setRows(mappedRows.map((row) => ({ ...row, billingMode: inferredMode })));
@@ -315,18 +313,6 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => handleModeChange('token')}
-                      className={cn(
-                        'rounded-md px-3 py-2 text-sm transition-colors',
-                        !isRequestMode
-                          ? 'bg-surface-tertiary text-text-primary'
-                          : 'border border-border-light text-text-secondary hover:bg-surface-hover',
-                      )}
-                    >
-                      按量计费
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => handleModeChange('request')}
                       className={cn(
                         'rounded-md px-3 py-2 text-sm transition-colors',
@@ -336,6 +322,18 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
                       )}
                     >
                       按次计费
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleModeChange('token')}
+                      className={cn(
+                        'rounded-md px-3 py-2 text-sm transition-colors',
+                        !isRequestMode
+                          ? 'bg-surface-tertiary text-text-primary'
+                          : 'border border-border-light text-text-secondary hover:bg-surface-hover',
+                      )}
+                    >
+                      按量计费
                     </button>
                     <button
                       type="button"
@@ -349,9 +347,7 @@ export default function ImageModelPricingManagement({ open, onOpenChange }) {
                 </div>
 
                 <div className="rounded-md border border-border-light bg-surface-secondary px-3 py-2 text-sm text-text-secondary">
-                  当前为全局统一模式，所有模型将按
-                  {isRequestMode ? '按次计费' : '按量计费'}
-                  生效。
+                  这里配置生图模型价格；实际生效模式由环境变量 IMAGE_BILLING_MODE 决定。
                 </div>
 
                 {Boolean(pricingQuery.error) && (

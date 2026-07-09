@@ -204,6 +204,7 @@ export const baseEndpointSchema = z.object({
     .optional(),
   titleEndpoint: z.string().optional(),
   titlePromptTemplate: z.string().optional(),
+  imageWatermark: z.boolean().optional(),
 });
 
 export type TBaseEndpoint = z.infer<typeof baseEndpointSchema>;
@@ -859,6 +860,7 @@ export const configSchema = z.object({
       all: baseEndpointSchema.optional(),
       [EModelEndpoint.openAI]: baseEndpointSchema.optional(),
       [EModelEndpoint.google]: baseEndpointSchema.optional(),
+      [EModelEndpoint.doubao]: baseEndpointSchema.optional(),
       [EModelEndpoint.anthropic]: baseEndpointSchema.optional(),
       [EModelEndpoint.gptPlugins]: baseEndpointSchema.optional(),
       [EModelEndpoint.azureOpenAI]: azureEndpointSchema.optional(),
@@ -942,6 +944,7 @@ export const defaultEndpoints: EModelEndpoint[] = [
   EModelEndpoint.chatGPTBrowser,
   EModelEndpoint.gptPlugins,
   EModelEndpoint.google,
+  EModelEndpoint.doubao,
   EModelEndpoint.anthropic,
   EModelEndpoint.custom,
   EModelEndpoint.bedrock,
@@ -956,6 +959,7 @@ export const alternateName = {
   [EModelEndpoint.chatGPTBrowser]: 'ChatGPT',
   [EModelEndpoint.gptPlugins]: 'Plugins',
   [EModelEndpoint.google]: 'Google',
+  [EModelEndpoint.doubao]: 'Doubao',
   [EModelEndpoint.anthropic]: 'Anthropic',
   [EModelEndpoint.custom]: 'Custom',
   [EModelEndpoint.bedrock]: 'AWS Bedrock',
@@ -1078,6 +1082,11 @@ export const defaultModels = {
     'gemini-2.0-flash-001',
     'gemini-2.0-flash-lite',
   ],
+  [EModelEndpoint.doubao]: [
+    'doubao-seedream-5-0-260128',
+    'doubao-seedream-4-5-251128',
+    'doubao-seedream-4-0-250828',
+  ],
   [EModelEndpoint.anthropic]: sharedAnthropicModels,
   [EModelEndpoint.openAI]: [
     ...sharedOpenAIModels,
@@ -1104,6 +1113,7 @@ export const initialModelsConfig: TModelsConfig = {
   [EModelEndpoint.azureOpenAI]: openAIModels,
   [EModelEndpoint.chatGPTBrowser]: ['text-davinci-002-render-sha'],
   [EModelEndpoint.google]: defaultModels[EModelEndpoint.google],
+  [EModelEndpoint.doubao]: defaultModels[EModelEndpoint.doubao],
   [EModelEndpoint.anthropic]: defaultModels[EModelEndpoint.anthropic],
   [EModelEndpoint.bedrock]: defaultModels[EModelEndpoint.bedrock],
 };
@@ -1118,6 +1128,7 @@ export const modularEndpoints = new Set<EModelEndpoint | string>([
   EModelEndpoint.gptPlugins,
   EModelEndpoint.anthropic,
   EModelEndpoint.google,
+  EModelEndpoint.doubao,
   EModelEndpoint.openAI,
   EModelEndpoint.azureOpenAI,
   EModelEndpoint.custom,
@@ -1128,6 +1139,7 @@ export const modularEndpoints = new Set<EModelEndpoint | string>([
 export const supportsBalanceCheck = {
   [EModelEndpoint.custom]: true,
   [EModelEndpoint.google]: true,
+  [EModelEndpoint.doubao]: true,
   [EModelEndpoint.openAI]: true,
   [EModelEndpoint.anthropic]: true,
   [EModelEndpoint.gptPlugins]: true,

@@ -59,13 +59,6 @@ const initializeClient = async ({
     });
 
     effectiveGoogleKey = routing.apiKey;
-
-    if (routing.source !== 'default') {
-      console.log(
-        `===============[${selectedProviderEnvPrefix}] User: ${req.user.id || req.user._id}, ` +
-          `Source: ${routing.source}, Type: ${routing.groupType ?? 'N/A'}, Env: ${routing.envKey ?? 'N/A'}`,
-      );
-    }
   }
 
   const credentials = isUserProvided

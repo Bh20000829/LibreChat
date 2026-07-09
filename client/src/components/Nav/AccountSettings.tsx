@@ -20,20 +20,24 @@ function AccountSettings() {
   const localize = useLocalize();
   const { user, token, isAuthenticated, logout } = useAuthContext();
   const { data: startupConfig } = useGetStartupConfig();
-  const quotaBalanceQuery = useQuery<{ remainingBalanceCny: number }>(['quota-me-balance'], async () => {
-    const res = await fetch('/api/quota/me', {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (!res.ok) {
-      throw new Error('Failed to fetch quota balance');
-    }
-    return res.json();
-  }, {
-    enabled: !!isAuthenticated,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchOnMount: true,
-  });
+  const quotaBalanceQuery = useQuery<{ remainingBalanceCny: number }>(
+    ['quota-me-balance'],
+    async () => {
+      const res = await fetch('/api/quota/me', {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) {
+        throw new Error('Failed to fetch quota balance');
+      }
+      return res.json();
+    },
+    {
+      enabled: !!isAuthenticated,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      refetchOnMount: true,
+    },
+  );
   const [showSettings, setShowSettings] = useState(false);
   const [showQuotaManagement, setShowQuotaManagement] = useState(false);
   const [showModelPricingManagement, setShowModelPricingManagement] = useState(false);

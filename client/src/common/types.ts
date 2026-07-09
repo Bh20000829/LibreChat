@@ -366,6 +366,7 @@ export type TOptions = {
   isResubmission?: boolean;
   /** Currently only utilized when `isResubmission === true`, uses that message's currently attached files */
   overrideFiles?: t.TMessage['files'];
+  overrideConversation?: Partial<t.TConversation>;
 };
 
 export type TAskFunction = (props: TAskProps, options?: TOptions) => void;

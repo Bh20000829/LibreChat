@@ -16,14 +16,14 @@ const {
   ImageGeneration,
 } = require('~/models/ImageGenerationStore');
 const { checkBalance } = require('~/models/balanceMethods');
-const { calculateUsageCostCny, calculateImageUsageCostCny } = require('~/models/pricingUtils');
+const { calculateImageUsageCostCny } = require('~/models/pricingUtils');
 const { incrementQuotaUsage } = require('~/models/quotaUsage');
 const { initializeClient: initializeOpenAIClient } = require('~/server/services/Endpoints/openAI');
 const { initializeClient: initializeGoogleClient } = require('~/server/services/Endpoints/google');
+const initializeDoubaoClient = require('~/server/services/Endpoints/doubao/initialize');
 const countTokens = require('~/server/utils/countTokens');
 const { getAppConfig } = require('~/server/services/Config');
-const addTitle = require('~/server/services/Endpoints/openAI/title');
-const addGoogleTitle = require('~/server/services/Endpoints/google/title');
+const addImageTitle = require('~/server/services/Endpoints/image/title');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { uploadImageBuffer } = require('~/server/services/Files/process');
 
@@ -35,17 +35,55 @@ const IMAGE_SIZE_MAP = {
   '3:4': '1024x1536',
 };
 
-const SUPPORTED_IMAGE_ENDPOINTS = new Set([EModelEndpoint.openAI, EModelEndpoint.google]);
-const IMAGE_GENERATION_HEARTBEAT_MS = 15000;
-
-const providerTitleGenerators = {
-  [EModelEndpoint.openAI]: addTitle,
-  [EModelEndpoint.google]: addGoogleTitle,
+const DOUBAO_IMAGE_SIZE_MAPS = {
+  '2K': {
+    '1:1': '2048x2048',
+    '16:9': '2848x1600',
+    '4:3': '2304x1728',
+    '3:4': '1728x2304',
+    '9:16': '1600x2848',
+    '3:2': '2496x1664',
+    '2:3': '1664x2496',
+    '21:9': '3136x1344',
+    '1024x1024': '2048x2048',
+    '1536x1024': '2496x1664',
+    '1024x1536': '1664x2496',
+  },
+  '4K': {
+    '1:1': '4096x4096',
+    '16:9': '5696x3200',
+    '4:3': '4608x3456',
+    '3:4': '3456x4608',
+    '9:16': '3200x5696',
+    '3:2': '4992x3328',
+    '2:3': '3328x4992',
+    '21:9': '6272x2688',
+    '1024x1024': '4096x4096',
+    '1536x1024': '4992x3328',
+    '1024x1536': '3328x4992',
+  },
 };
+const DOUBAO_MIN_IMAGE_PIXELS = 3686400;
+const DOUBAO_IMAGE_SIZE_MULTIPLE = 16;
+const DOUBAO_MAX_SOURCE_IMAGES = 14;
+const OPENAI_MAX_SOURCE_IMAGES = 16;
+const GOOGLE_MAX_SOURCE_IMAGES = 14;
+const DEFAULT_MAX_SOURCE_IMAGES = 1;
+
+const SUPPORTED_IMAGE_ENDPOINTS = new Set([
+  EModelEndpoint.openAI,
+  EModelEndpoint.google,
+  EModelEndpoint.doubao,
+]);
+const IMAGE_GENERATION_HEARTBEAT_MS = 15000;
 
 function getProviderLabel(endpoint) {
   if (endpoint === EModelEndpoint.google) {
     return 'Google';
+  }
+
+  if (endpoint === EModelEndpoint.doubao) {
+    return 'Doubao';
   }
 
   return 'OpenAI';
@@ -54,6 +92,10 @@ function getProviderLabel(endpoint) {
 function getInitializeClient(endpoint) {
   if (endpoint === EModelEndpoint.google) {
     return initializeGoogleClient;
+  }
+
+  if (endpoint === EModelEndpoint.doubao) {
+    return initializeDoubaoClient;
   }
 
   return initializeOpenAIClient;
@@ -65,12 +107,25 @@ function resolveImageReverseProxy(endpoint) {
     return process.env.GOOGLE_IMAGE_REVERSE_PROXY?.trim() || generic || null;
   }
 
+  if (endpoint === EModelEndpoint.doubao) {
+    return (
+      process.env.DOUBAO_IMAGE_REVERSE_PROXY?.trim() ||
+      process.env.DOUBAO_IMAGE_BASEURL?.trim() ||
+      generic ||
+      null
+    );
+  }
+
   return process.env.OPENAI_IMAGE_REVERSE_PROXY?.trim() || generic || null;
 }
 
 function resolveImageProviderKeyPrefix(endpoint) {
   if (endpoint === EModelEndpoint.google) {
     return 'GOOGLE_IMAGE_KEY';
+  }
+
+  if (endpoint === EModelEndpoint.doubao) {
+    return 'DOUBAO_IMAGE_KEY';
   }
 
   return 'OPENAI_IMAGE_API_KEY';
@@ -222,8 +277,7 @@ function normalizeImageUsage(usage) {
     total_tokens: Number.isFinite(totalTokens) ? totalTokens : 0,
     input_tokens: Number.isFinite(inputTokens) ? inputTokens : 0,
     output_tokens: Number.isFinite(outputTokens) ? outputTokens : 0,
-    input_tokens_details:
-      usage.input_tokens_details ?? toLegacyDetailMap(promptModalityDetails),
+    input_tokens_details: usage.input_tokens_details ?? toLegacyDetailMap(promptModalityDetails),
     output_tokens_details:
       usage.output_tokens_details ?? toLegacyDetailMap(candidatesModalityDetails),
     cached_content_tokens: Number.isFinite(cachedContentTokens) ? cachedContentTokens : 0,
@@ -241,33 +295,266 @@ function getImageModelOptions(endpointOption = {}) {
   return endpointOption?.model_parameters ?? endpointOption?.modelOptions ?? {};
 }
 
-function resolveImageCount() {
-  const parsed = Number(process.env.OPENAI_IMAGE_GENERATION_N ?? 1);
+function getMaxSourceImages(endpoint) {
+  if (endpoint === EModelEndpoint.doubao) {
+    return DOUBAO_MAX_SOURCE_IMAGES;
+  }
+  if (endpoint === EModelEndpoint.openAI) {
+    return OPENAI_MAX_SOURCE_IMAGES;
+  }
+  if (endpoint === EModelEndpoint.google) {
+    return GOOGLE_MAX_SOURCE_IMAGES;
+  }
+  return DEFAULT_MAX_SOURCE_IMAGES;
+}
+
+function parseOptionalBoolean(value) {
+  if (value == null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) {
+      return true;
+    }
+
+    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return undefined;
+}
+
+function resolveDoubaoImageWatermark({ req, endpoint, endpointOption, imageModelOptions }) {
+  if (endpoint !== EModelEndpoint.doubao || imageModelOptions.watermark != null) {
+    return undefined;
+  }
+
+  return (
+    parseOptionalBoolean(endpointOption?.watermark) ??
+    parseOptionalBoolean(req?.config?.endpoints?.[EModelEndpoint.doubao]?.imageWatermark) ??
+    parseOptionalBoolean(req?.config?.endpoints?.all?.imageWatermark) ??
+    parseOptionalBoolean(process.env.DOUBAO_IMAGE_WATERMARK) ??
+    false
+  );
+}
+
+function resolveDoubaoSequentialImageOptions(endpoint, targetImageCount) {
+  if (endpoint !== EModelEndpoint.doubao) {
+    return {};
+  }
+
+  if (targetImageCount <= 1) {
+    return {
+      sequential_image_generation: 'disabled',
+    };
+  }
+
+  return {
+    sequential_image_generation: 'auto',
+    sequential_image_generation_options: { max_images: targetImageCount },
+  };
+}
+
+function resolveDoubaoMaxImages({ endpoint, req, endpointOption, imageModelOptions }) {
+  if (endpoint !== EModelEndpoint.doubao) {
+    return undefined;
+  }
+
+  const parsed = Number(
+    req.body.imageMaxImages ??
+      endpointOption.imageMaxImages ??
+      imageModelOptions.imageMaxImages ??
+      imageModelOptions.max_images ??
+      imageModelOptions.sequential_image_generation_options?.max_images ??
+      1,
+  );
+
   if (!Number.isFinite(parsed)) {
     return 1;
   }
 
-  return Math.min(Math.max(Math.floor(parsed), 1), 10);
+  return Math.min(Math.max(Math.floor(parsed), 1), 4);
+}
+
+function buildDoubaoImagePrompt({ prompt, targetImageCount, supplementIndex }) {
+  if (targetImageCount <= 1) {
+    return prompt;
+  }
+
+  if (supplementIndex != null) {
+    return [
+      `请补充生成第 ${supplementIndex} 张图片，只输出 1 张图片。`,
+      `这张图需要和前面组图保持同一主题、风格、角色或主体一致，但构图、动作、角度或细节要有明显区别。`,
+      `原始需求：${prompt}`,
+    ].join('\n');
+  }
+
+  return [
+    `请生成一组 ${targetImageCount} 张内容相关的图片，必须输出 ${targetImageCount} 张。`,
+    `每张图片保持同一主题和整体风格，但构图、动作、角度或细节应有所区别。`,
+    `原始需求：${prompt}`,
+  ].join('\n');
 }
 
 function resolveImageSize(requestedSize) {
-  if (typeof requestedSize !== 'string' || requestedSize.trim().length === 0) {
+  if (
+    typeof requestedSize !== 'string' ||
+    requestedSize.trim().length === 0 ||
+    requestedSize.trim().toLowerCase() === 'auto'
+  ) {
     return IMAGE_SIZE_MAP['1:1'];
   }
 
   return IMAGE_SIZE_MAP[requestedSize] ?? requestedSize;
 }
 
-function resolveProviderImageSize(requestedSize, endpoint) {
+function normalizeDoubaoImageResolution(requestedResolution) {
+  if (typeof requestedResolution !== 'string') {
+    return '2K';
+  }
+
+  const normalizedResolution = requestedResolution.trim().toUpperCase();
+  return normalizedResolution === '4K' ? '4K' : '2K';
+}
+
+function inferSmartImageAspectRatio(prompt) {
+  const value = typeof prompt === 'string' ? prompt.toLowerCase() : '';
+  if (!value) {
+    return '1:1';
+  }
+
+  if (
+    /(\u6a2a\u5e45|\u6a2a\u7248\u6d77\u62a5|banner|cinematic|\u7535\u5f71\u611f|\u8d85\u5bbd|\u5168\u666f|panorama|21:9)/i.test(
+      value,
+    )
+  ) {
+    return '21:9';
+  }
+
+  if (
+    /(\u624b\u673a\u58c1\u7eb8|\u7ad6\u5c4f|\u7ad6\u7248|story|reels|tiktok|\u5c0f\u7ea2\u4e66\u5c01\u9762|9:16)/i.test(
+      value,
+    )
+  ) {
+    return '9:16';
+  }
+
+  if (
+    /(\u6d77\u62a5|poster|\u5168\u8eab|\u4eba\u50cf|portrait|\u89d2\u8272|\u4eba\u7269|\u6a21\u7279|3:4)/i.test(
+      value,
+    )
+  ) {
+    return '3:4';
+  }
+
+  if (
+    /(\u98ce\u666f|\u573a\u666f|\u80cc\u666f|\u58c1\u7eb8|landscape|desktop|wallpaper|16:9)/i.test(
+      value,
+    )
+  ) {
+    return '16:9';
+  }
+
+  if (
+    /(\u5934\u50cf|\u56fe\u6807|logo|\u5546\u54c1|\u4ea7\u54c1|icon|avatar|product|1:1)/i.test(
+      value,
+    )
+  ) {
+    return '1:1';
+  }
+
+  return '1:1';
+}
+
+function resolveDoubaoImageSize({ requestedSize, imageResolution, prompt }) {
+  const normalizedResolution = normalizeDoubaoImageResolution(imageResolution);
+  const sizeMap = DOUBAO_IMAGE_SIZE_MAPS[normalizedResolution] ?? DOUBAO_IMAGE_SIZE_MAPS['2K'];
+  const normalizedSize = typeof requestedSize === 'string' ? requestedSize.trim() : '';
+  const aspectRatio =
+    !normalizedSize || normalizedSize.toLowerCase() === 'auto'
+      ? inferSmartImageAspectRatio(prompt)
+      : normalizedSize;
+
+  return sizeMap[aspectRatio] ?? aspectRatio;
+}
+
+function resolveProviderImageSize(requestedSize, endpoint, options = {}) {
   if (endpoint === EModelEndpoint.google) {
-    if (typeof requestedSize !== 'string' || requestedSize.trim().length === 0) {
+    if (
+      typeof requestedSize !== 'string' ||
+      requestedSize.trim().length === 0 ||
+      requestedSize.trim().toLowerCase() === 'auto'
+    ) {
       return '1:1';
     }
 
     return requestedSize;
   }
 
+  if (endpoint === EModelEndpoint.doubao) {
+    return resolveDoubaoImageSize({
+      requestedSize,
+      imageResolution: options.imageResolution,
+      prompt: options.prompt,
+    });
+  }
+
   return resolveImageSize(requestedSize);
+}
+
+function isExplicitImageSizeSelection(requestedSize) {
+  if (typeof requestedSize !== 'string') {
+    return false;
+  }
+
+  const normalizedSize = requestedSize.trim().toLowerCase();
+  return normalizedSize.length > 0 && normalizedSize !== 'auto';
+}
+
+function roundUpToMultiple(value, multiple) {
+  return Math.ceil(value / multiple) * multiple;
+}
+
+function normalizeDoubaoEditImageSize(width, height) {
+  const originalPixels = width * height;
+  if (originalPixels >= DOUBAO_MIN_IMAGE_PIXELS) {
+    return `${Math.round(width)}x${Math.round(height)}`;
+  }
+
+  const scale = Math.sqrt(DOUBAO_MIN_IMAGE_PIXELS / originalPixels);
+  const normalizedWidth = roundUpToMultiple(Math.ceil(width * scale), DOUBAO_IMAGE_SIZE_MULTIPLE);
+  const normalizedHeight = roundUpToMultiple(Math.ceil(height * scale), DOUBAO_IMAGE_SIZE_MULTIPLE);
+
+  return `${normalizedWidth}x${normalizedHeight}`;
+}
+
+function getEditImageSize({ sourceImages, endpoint }) {
+  if (!Array.isArray(sourceImages)) {
+    return null;
+  }
+
+  for (const image of sourceImages) {
+    const width = Number(image?.width);
+    const height = Number(image?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      continue;
+    }
+
+    if (endpoint === EModelEndpoint.doubao) {
+      return normalizeDoubaoEditImageSize(width, height);
+    }
+
+    return `${Math.round(width)}x${Math.round(height)}`;
+  }
+
+  return null;
 }
 
 function getImageOutputFormat(item, fallback = 'png') {
@@ -388,13 +675,35 @@ function isPreviousImageInheritanceEnabled() {
   return !['false', '0', 'off', 'no'].includes(value);
 }
 
-async function resolveImageFilesByIds(req, fileIds, notFoundMessage) {
+function parseImageInheritancePreference(value) {
+  if (value == null) {
+    return true;
+  }
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['false', '0', 'off', 'no'].includes(normalized)) {
+      return false;
+    }
+    if (['true', '1', 'on', 'yes'].includes(normalized)) {
+      return true;
+    }
+  }
+
+  return Boolean(value);
+}
+
+async function resolveImageFilesByIds(req, fileIds, notFoundMessage, maxSourceImages) {
   if (fileIds.length === 0) {
     return [];
   }
 
-  if (fileIds.length > 16) {
-    throw new Error('OpenAI image editing supports up to 16 source images');
+  if (fileIds.length > maxSourceImages) {
+    throw new Error(`Image editing supports up to ${maxSourceImages} source image(s)`);
   }
 
   const storedFiles = await getFiles(
@@ -437,9 +746,14 @@ async function resolveImageFilesByIds(req, fileIds, notFoundMessage) {
   return resolvedFiles;
 }
 
-async function resolveSourceImages(req, files) {
+async function resolveSourceImages(req, files, maxSourceImages) {
   const fileIds = getRequestedFileIds(files);
-  return resolveImageFilesByIds(req, fileIds, 'Referenced image not found for editing');
+  return resolveImageFilesByIds(
+    req,
+    fileIds,
+    'Referenced image not found for editing',
+    maxSourceImages,
+  );
 }
 
 function getGeneratedFileIdsFromRecord(record) {
@@ -453,7 +767,12 @@ function getGeneratedFileIdsFromRecord(record) {
     .filter((fileId) => typeof fileId === 'string' && fileId.length > 0);
 }
 
-async function resolveInheritedSourceImages({ req, conversationId, responseMessageId }) {
+async function resolveInheritedSourceImages({
+  req,
+  conversationId,
+  responseMessageId,
+  maxSourceImages,
+}) {
   if (!isPreviousImageInheritanceEnabled() || !conversationId) {
     return [];
   }
@@ -471,7 +790,15 @@ async function resolveInheritedSourceImages({ req, conversationId, responseMessa
   const latestGeneration = await ImageGeneration.findOne(query)
     .sort({ updatedAt: -1, createdAt: -1 })
     .lean();
+
+  if (Number(latestGeneration?.imageCount ?? 0) > 1) {
+    return [];
+  }
+
   const fileIds = getGeneratedFileIdsFromRecord(latestGeneration);
+  if (fileIds.length > 1) {
+    return [];
+  }
 
   if (fileIds.length === 0) {
     return [];
@@ -481,8 +808,9 @@ async function resolveInheritedSourceImages({ req, conversationId, responseMessa
   try {
     inheritedImages = await resolveImageFilesByIds(
       req,
-      fileIds.slice(0, 16),
+      fileIds.slice(0, maxSourceImages),
       'Inherited image not found for editing',
+      maxSourceImages,
     );
   } catch (error) {
     logger.warn('[Image Controller] Failed to inherit previous generated image(s)', {
@@ -493,12 +821,6 @@ async function resolveInheritedSourceImages({ req, conversationId, responseMessa
     });
     return [];
   }
-
-  logger.info('[Image Controller] Inherited previous generated image(s)', {
-    conversationId,
-    responseMessageId,
-    sourceImageFileIds: inheritedImages.map((file) => file.file_id),
-  });
 
   return inheritedImages;
 }
@@ -583,7 +905,7 @@ function normalizeGoogleImageResult(imageResult, _fallbackText) {
   return {
     created: Date.now(),
     output_format: outputFormat,
-    usage: response?.usageMetadata,
+    usage: response?.usageMetadata ?? response?.usage_metadata ?? response?.usage,
     data: images,
     responseText: null,
   };
@@ -606,44 +928,15 @@ function normalizeProviderImageResult({ endpoint, imageResult, fallbackText }) {
 }
 
 async function maybeAddImageTitle({ req, text, responseMessage, client, endpoint }) {
-  const providerTitleGenerator = providerTitleGenerators[endpoint];
-
-  if (providerTitleGenerator) {
-    return providerTitleGenerator(req, {
-      text,
-      response: responseMessage,
-      client,
-    });
-  }
-
-  if (typeof client?.titleConvo !== 'function') {
-    return undefined;
-  }
-
-  const title = await client.titleConvo({
+  return addImageTitle(req, {
     text,
-    responseText: responseMessage?.text ?? '',
+    response: responseMessage,
+    client,
+    endpoint,
   });
-
-  if (!title || typeof title !== 'string') {
-    return undefined;
-  }
-
-  return saveConvo(
-    req,
-    {
-      conversationId: responseMessage.conversationId,
-      title: title
-        .split('\n')[0]
-        .trim()
-        .replace(/^['"\s]+|['"\s]+$/g, ''),
-    },
-    { context: 'api/server/controllers/images/openAI.js - save generated title' },
-  );
 }
 
 async function generateOpenAIImage(req, res) {
-  const startedAt = Date.now();
   const {
     text,
     model,
@@ -659,8 +952,9 @@ async function generateOpenAIImage(req, res) {
 
   const parsedConvo = splitOverrideId(overrideConvoId);
   const parsedUserMessage = splitOverrideId(overrideUserMessageId);
-  const newConvo =
-    !parsedConvo.id && (!requestConversationId || requestConversationId === Constants.NEW_CONVO);
+  const isNewConversationRequest =
+    !requestConversationId || requestConversationId === Constants.NEW_CONVO;
+  const newConvo = !parsedConvo.id && isNewConversationRequest;
 
   const conversationId = parsedConvo.id ?? requestConversationId ?? crypto.randomUUID();
   const userMessageId = parsedUserMessage.id ?? req.body.messageId ?? crypto.randomUUID();
@@ -669,12 +963,48 @@ async function generateOpenAIImage(req, res) {
   const {
     imageSize: configuredImageSize,
     size: configuredSize,
+    imageResolution: configuredImageResolution,
+    resolution: configuredResolution,
+    imageMaxImages: _configuredImageMaxImages,
+    sequential_image_generation: _configuredSequentialImageGeneration,
+    sequential_image_generation_options: _configuredSequentialImageGenerationOptions,
     n: _configuredN,
     ...providerImageOptions
   } = imageModelOptions;
-  const requestedImageSize = req.body.imageSize ?? configuredImageSize ?? configuredSize;
-  const resolvedImageSize = resolveProviderImageSize(requestedImageSize, endpoint);
-  const resolvedImageCount = resolveImageCount();
+  const explicitRequestedImageSize =
+    req.body.imageSize ?? endpointOption.imageSize ?? endpointOption.size;
+  const requestedImageSize =
+    explicitRequestedImageSize ?? configuredImageSize ?? configuredSize;
+  const requestedImageResolution =
+    req.body.imageResolution ??
+    endpointOption.imageResolution ??
+    configuredImageResolution ??
+    configuredResolution;
+  const doubaoMaxImages = resolveDoubaoMaxImages({
+    endpoint,
+    req,
+    endpointOption,
+    imageModelOptions,
+  });
+  const doubaoSequentialImageOptions = resolveDoubaoSequentialImageOptions(
+    endpoint,
+    doubaoMaxImages,
+  );
+  const requestedGenerationImageSize = resolveProviderImageSize(requestedImageSize, endpoint, {
+    imageResolution: requestedImageResolution,
+    prompt: text,
+  });
+  const inheritPreviousImage = parseImageInheritancePreference(
+    req.body.inheritPreviousImage ?? endpointOption.inheritPreviousImage,
+  );
+  const resolvedDoubaoWatermark = resolveDoubaoImageWatermark({
+    req,
+    endpoint,
+    endpointOption,
+    imageModelOptions,
+  });
+  const resolvedImageCount = DEFAULT_MAX_SOURCE_IMAGES;
+  const maxSourceImages = getMaxSourceImages(endpoint);
   const resolvedModel = imageModelOptions.model ?? model;
   const providerLabel = getProviderLabel(endpoint);
   let stopImageKeepAlive = () => {};
@@ -764,23 +1094,28 @@ async function generateOpenAIImage(req, res) {
       model: resolvedModel,
     });
 
-    logger.info(`[${providerLabel} Image Controller] Stage completed`, {
-      stage: 'pre-provider',
-      conversationId,
-      model: resolvedModel,
-      durationMs: Date.now() - startedAt,
-    });
-
-    const providerStartedAt = Date.now();
-    let sourceImages = await resolveSourceImages(req, req.body.files);
-    if (sourceImages.length === 0 && !newConvo) {
+    let sourceImages = await resolveSourceImages(req, req.body.files, maxSourceImages);
+    if (
+      inheritPreviousImage &&
+      sourceImages.length === 0 &&
+      !newConvo &&
+      parentMessageId !== Constants.NO_PARENT
+    ) {
       sourceImages = await resolveInheritedSourceImages({
         req,
         conversationId,
         responseMessageId,
+        maxSourceImages,
       });
     }
     const operationType = sourceImages.length > 0 ? 'edit' : 'generation';
+    const useRequestedSizeForEdit = isExplicitImageSizeSelection(explicitRequestedImageSize);
+    const resolvedImageSize =
+      operationType === 'edit'
+        ? useRequestedSizeForEdit
+          ? requestedGenerationImageSize
+          : (getEditImageSize({ sourceImages, endpoint }) ?? requestedGenerationImageSize)
+        : requestedGenerationImageSize;
     const initializeClient = getInitializeClient(endpoint);
     const imageReverseProxyUrl = resolveImageReverseProxy(endpoint);
     const imageProviderEnvPrefix = resolveImageProviderKeyPrefix(endpoint);
@@ -807,62 +1142,96 @@ async function generateOpenAIImage(req, res) {
       useUserProviderApiKey: false,
     });
 
+    const promptText = text.trim();
     const imageRequest = {
-      prompt: text.trim(),
+      prompt:
+        endpoint === EModelEndpoint.doubao
+          ? buildDoubaoImagePrompt({ prompt: promptText, targetImageCount: doubaoMaxImages })
+          : promptText,
       model: resolvedModel,
       ...providerImageOptions,
+      ...(resolvedDoubaoWatermark != null ? { watermark: resolvedDoubaoWatermark } : {}),
+      ...doubaoSequentialImageOptions,
       n: resolvedImageCount,
       size: resolvedImageSize,
     };
+    const sendProviderDebug = (type, data) => {
+      sendEvent(res, {
+        event: 'ai_provider_debug',
+        type,
+        data,
+      });
+    };
 
-    const imageResult = await (endpoint === EModelEndpoint.openAI && operationType === 'edit'
-      ? client.editImage(
-          {
-            ...imageRequest,
-            imageFiles: sourceImages,
-          },
-          req.abortController,
-        )
-      : client.generateImage(
-          {
-            ...imageRequest,
-            ...(sourceImages.length > 0 ? { imageFiles: sourceImages } : {}),
-          },
-          req.abortController,
-        ));
+    const requestImageFromProvider = async (request) =>
+      endpoint === EModelEndpoint.openAI && operationType === 'edit'
+        ? client.editImage(
+            {
+              ...request,
+              imageFiles: sourceImages,
+              onProviderRequest: (data) => sendProviderDebug('request', data),
+              onProviderResponse: (data) => sendProviderDebug('response', data),
+            },
+            req.abortController,
+          )
+        : client.generateImage(
+            {
+              ...request,
+              ...(sourceImages.length > 0 ? { imageFiles: sourceImages } : {}),
+              onProviderRequest: (data) => sendProviderDebug('request', data),
+              onProviderResponse: (data) => sendProviderDebug('response', data),
+            },
+            req.abortController,
+          );
 
-    const normalizedResult = normalizeProviderImageResult({
+    const imageResult = await requestImageFromProvider(imageRequest);
+    let normalizedResult = normalizeProviderImageResult({
       endpoint,
       imageResult,
-      fallbackText: text.trim(),
+      fallbackText: promptText,
     });
 
-    logger.info(`[${providerLabel} Image Controller] Stage completed`, {
-      stage: 'provider-response',
-      conversationId,
-      model: resolvedModel,
-      operationType,
-      durationMs: Date.now() - providerStartedAt,
-      totalDurationMs: Date.now() - startedAt,
-    });
+    if (endpoint === EModelEndpoint.doubao && doubaoMaxImages != null) {
+      const combinedImages = Array.isArray(normalizedResult?.data)
+        ? [...normalizedResult.data]
+        : [];
 
-    logger.info(`[${providerLabel} Image Controller] Raw provider image response received`, {
-      conversationId,
-      model: resolvedModel,
-      created: normalizedResult?.created,
-      output_format: normalizedResult?.output_format,
-      usage: normalizedResult?.usage,
-      data: Array.isArray(normalizedResult?.data)
-        ? normalizedResult.data.map((item) => ({
-            has_b64_json: typeof item?.b64_json === 'string' && item.b64_json.length > 0,
-            has_inline_data:
-              typeof item?.inlineData?.data === 'string' && item.inlineData.data.length > 0,
-            revised_prompt: item?.revised_prompt,
-            url: item?.url,
-            mimeType: item?.inlineData?.mimeType,
-          }))
-        : normalizedResult?.data,
-    });
+      while (combinedImages.length < doubaoMaxImages) {
+        const supplementRequest = {
+          ...imageRequest,
+          prompt: buildDoubaoImagePrompt({
+            prompt: promptText,
+            targetImageCount: doubaoMaxImages,
+            supplementIndex: combinedImages.length + 1,
+          }),
+          sequential_image_generation: 'disabled',
+        };
+        delete supplementRequest.sequential_image_generation_options;
+
+        const supplementResult = await requestImageFromProvider(supplementRequest);
+        const normalizedSupplement = normalizeProviderImageResult({
+          endpoint,
+          imageResult: supplementResult,
+          fallbackText: promptText,
+        });
+        const supplementImages = Array.isArray(normalizedSupplement?.data)
+          ? normalizedSupplement.data
+          : [];
+
+        if (supplementImages.length === 0) {
+          throw new Error(
+            `Doubao image generation returned ${combinedImages.length}/${doubaoMaxImages} images`,
+          );
+        }
+
+        combinedImages.push(...supplementImages);
+      }
+
+      normalizedResult = {
+        ...normalizedResult,
+        data: combinedImages.slice(0, doubaoMaxImages),
+      };
+    }
 
     const outputFormat =
       normalizedResult?.output_format ?? endpointOption.model_parameters?.output_format ?? 'png';
@@ -877,9 +1246,7 @@ async function generateOpenAIImage(req, res) {
       content.push(createTextPart(responseText));
     }
 
-    const persistStartedAt = Date.now();
     for (const [index, item] of images.entries()) {
-      const singleImageStartedAt = Date.now();
       let imageFile;
 
       try {
@@ -915,25 +1282,7 @@ async function generateOpenAIImage(req, res) {
       });
 
       content.push(createImagePart(imageFile));
-
-      logger.info(`[${providerLabel} Image Controller] Stage completed`, {
-        stage: 'persist-image',
-        conversationId,
-        model: resolvedModel,
-        index,
-        durationMs: Date.now() - singleImageStartedAt,
-        totalDurationMs: Date.now() - startedAt,
-      });
     }
-
-    logger.info(`[${providerLabel} Image Controller] Stage completed`, {
-      stage: 'persist-images-total',
-      conversationId,
-      model: resolvedModel,
-      imageCount: images.length,
-      durationMs: Date.now() - persistStartedAt,
-      totalDurationMs: Date.now() - startedAt,
-    });
 
     if (content.length === 0) {
       throw new Error(`${providerLabel} did not return any image data`);
@@ -1022,13 +1371,6 @@ async function generateOpenAIImage(req, res) {
 
     const conversation = await saveConversation();
 
-    logger.info(`[${providerLabel} Image Controller] Stage completed`, {
-      stage: 'post-persist-save',
-      conversationId,
-      model: resolvedModel,
-      durationMs: Date.now() - startedAt,
-    });
-
     stopImageKeepAlive();
     sendEvent(res, {
       final: true,
@@ -1038,15 +1380,13 @@ async function generateOpenAIImage(req, res) {
       responseMessage,
     });
 
-    logger.info(`[${providerLabel} Image Controller] Stage completed`, {
-      stage: 'final-sse-sent',
-      conversationId,
-      model: resolvedModel,
-      totalDurationMs: Date.now() - startedAt,
-    });
     res.end();
 
-    if (parentMessageId === Constants.NO_PARENT && newConvo) {
+    if (
+      !parsedConvo.skipSave &&
+      parentMessageId === Constants.NO_PARENT &&
+      isNewConversationRequest
+    ) {
       maybeAddImageTitle({
         req,
         text,

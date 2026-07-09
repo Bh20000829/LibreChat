@@ -1,8 +1,18 @@
 import { memo, useRef, useMemo, useEffect, useState, useCallback } from 'react';
 import { useWatch } from 'react-hook-form';
 import { TextareaAutosize, Dropdown } from '@librechat/client';
+import {
+  Root as PopoverRoot,
+  Content as PopoverContent,
+  Trigger as PopoverTrigger,
+} from '@radix-ui/react-popover';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { Constants, isAssistantsEndpoint, isAgentsEndpoint } from 'librechat-data-provider';
+import {
+  Constants,
+  EModelEndpoint,
+  isAssistantsEndpoint,
+  isAgentsEndpoint,
+} from 'librechat-data-provider';
 import {
   useChatContext,
   useChatFormContext,
@@ -24,7 +34,7 @@ import { mainTextareaId, BadgeItem } from '~/common';
 import useConversationMode from '~/hooks/Conversations/useConversationMode';
 import AttachFileChat from './Files/AttachFileChat';
 import FileFormChat from './Files/FileFormChat';
-import { cn, removeFocusRings } from '~/utils';
+import { canInheritFromImageMessage, cn, removeFocusRings } from '~/utils';
 import TextareaHeader from './TextareaHeader';
 import PromptsCommand from './PromptsCommand';
 import AudioRecorder from './AudioRecorder';
@@ -38,16 +48,6 @@ import Mention from './Mention';
 import store from '~/store';
 
 const ChatForm = memo(({ index = 0 }: { index?: number }) => {
-  const imageSizeOptions = useMemo(
-    () => [
-      { value: '1:1', label: '1:1' },
-      { value: '16:9', label: '16:9' },
-      { value: '9:16', label: '9:16' },
-      { value: '4:3', label: '4:3' },
-      { value: '3:4', label: '3:4' },
-    ],
-    [],
-  );
   const submitButtonRef = useRef<HTMLButtonElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   useFocusChatEffect(textAreaRef);
@@ -56,6 +56,7 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
   const { mode } = useConversationMode(index);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isDoubaoImageSettingsOpen, setIsDoubaoImageSettingsOpen] = useState(false);
   const [, setIsScrollable] = useState(false);
   const [visualRowCount, setVisualRowCount] = useState(1);
   const [isTextAreaFocused, setIsTextAreaFocused] = useState(false);
@@ -86,6 +87,7 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
     conversation,
     isSubmitting,
     filesLoading,
+    latestMessage,
     newConversation,
     handleStopGenerating,
   } = useChatContext();
@@ -108,6 +110,74 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
     [conversation?.conversationId],
   );
   const imageModeEnabled = useMemo(() => mode === 'image', [mode]);
+  const isDoubaoImageMode = useMemo(
+    () =>
+      imageModeEnabled &&
+      (conversation?.endpoint === EModelEndpoint.doubao ||
+        conversation?.endpointType === EModelEndpoint.doubao ||
+        endpoint === EModelEndpoint.doubao),
+    [conversation?.endpoint, conversation?.endpointType, endpoint, imageModeEnabled],
+  );
+  const imageSizeOptions = useMemo(
+    () =>
+      isDoubaoImageMode
+        ? [
+            { value: 'auto', label: localize('com_ui_smart') },
+            { value: '21:9', label: '21:9' },
+            { value: '16:9', label: '16:9' },
+            { value: '3:2', label: '3:2' },
+            { value: '4:3', label: '4:3' },
+            { value: '1:1', label: '1:1' },
+            { value: '3:4', label: '3:4' },
+            { value: '2:3', label: '2:3' },
+            { value: '9:16', label: '9:16' },
+          ]
+        : [
+            { value: '1:1', label: '1:1' },
+            { value: '16:9', label: '16:9' },
+            { value: '9:16', label: '9:16' },
+            { value: '4:3', label: '4:3' },
+            { value: '3:4', label: '3:4' },
+          ],
+    [isDoubaoImageMode, localize],
+  );
+  const selectedImageSize = useMemo(() => {
+    const configuredSize = conversation?.imageSize ?? (isDoubaoImageMode ? 'auto' : '1:1');
+    return imageSizeOptions.some((option) => option.value === configuredSize)
+      ? configuredSize
+      : '1:1';
+  }, [conversation?.imageSize, imageSizeOptions, isDoubaoImageMode]);
+  const selectedImageSizeLabel = useMemo(
+    () =>
+      imageSizeOptions.find((option) => option.value === selectedImageSize)?.label ??
+      selectedImageSize,
+    [imageSizeOptions, selectedImageSize],
+  );
+  const selectedImageResolution = conversation?.imageResolution === '4K' ? '4K' : '2K';
+  const imageMaxImageOptions = useMemo(
+    () => Array.from({ length: 4 }, (_, index) => index + 1),
+    [],
+  );
+  const selectedImageMaxImages = useMemo(() => {
+    const parsedValue = Number(conversation?.imageMaxImages ?? 1);
+    if (!Number.isFinite(parsedValue)) {
+      return 1;
+    }
+
+    return Math.min(Math.max(Math.floor(parsedValue), 1), 4);
+  }, [conversation?.imageMaxImages]);
+  const inheritPreviousImage =
+    (conversation?.inheritPreviousImage ?? true) && canInheritFromImageMessage(latestMessage);
+  const hasUserUploadedFiles = (files?.size ?? 0) > 0;
+  const hasConversationMessages =
+    Array.isArray(conversation?.messages) && conversation.messages.length > 0;
+  const showImageInheritanceHint =
+    imageModeEnabled &&
+    inheritPreviousImage &&
+    !hasUserUploadedFiles &&
+    hasConversationMessages &&
+    conversationId !== Constants.NEW_CONVO &&
+    conversationId !== Constants.PENDING_CONVO;
 
   const isRTL = useMemo(
     () => (chatDirection != null ? chatDirection?.toLowerCase() === 'rtl' : false),
@@ -344,14 +414,146 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
               <div className={cn('flex items-center gap-2', isRTL ? 'mr-2' : 'ml-2')}>
                 <AttachFileChat conversation={conversation} disableInputs={disableInputs} />
                 {imageModeEnabled && (
-                  <Dropdown
-                    value={conversation?.imageSize ?? '1:1'}
-                    onChange={setOption('imageSize')}
-                    options={imageSizeOptions}
-                    ariaLabel={localize('com_ui_size')}
-                    className="text-text-primary/85 hover:bg-surface-hover/50 min-w-[92px] border-transparent bg-transparent"
-                    sizeClasses="w-[140px]"
-                  />
+                  <>
+                    {isDoubaoImageMode ? (
+                      <>
+                        <PopoverRoot
+                          open={isDoubaoImageSettingsOpen}
+                          onOpenChange={setIsDoubaoImageSettingsOpen}
+                        >
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label={localize('com_ui_image_settings')}
+                              disabled={disableInputs}
+                              className="text-text-primary/85 hover:bg-surface-hover/50 flex h-8 min-w-[104px] items-center gap-2 rounded-lg border border-transparent bg-transparent px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <span className="border-current/70 flex size-4 items-center justify-center rounded border">
+                                <span className="border-current/80 size-1.5 rounded-sm border" />
+                              </span>
+                              <span>{selectedImageSizeLabel}</span>
+                              <span className="text-text-secondary">{selectedImageResolution}</span>
+                              <span className="text-text-secondary">
+                                {selectedImageMaxImages}
+                                {localize('com_ui_image_count_suffix')}
+                              </span>
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            side="top"
+                            align={isRTL ? 'end' : 'start'}
+                            sideOffset={10}
+                            className="z-50 w-[min(464px,calc(100vw-32px))] rounded-2xl border border-border-light bg-surface-primary p-3 shadow-xl outline-none"
+                          >
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <div className="text-xs text-text-secondary">
+                                  {localize('com_ui_select_ratio')}
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 rounded-xl bg-surface-secondary p-2 sm:grid-cols-6">
+                                  {imageSizeOptions.map((option) => {
+                                    const selected = selectedImageSize === option.value;
+                                    const isPortrait = ['1:1', '3:4', '2:3', '9:16'].includes(
+                                      option.value,
+                                    );
+                                    const isSmart = option.value === 'auto';
+                                    return (
+                                      <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => setOption('imageSize')(option.value)}
+                                        className={cn(
+                                          'flex h-[66px] flex-col items-center justify-center gap-1 rounded-lg text-xs text-text-primary transition-colors hover:bg-surface-hover',
+                                          selected && 'bg-surface-hover shadow-sm',
+                                        )}
+                                      >
+                                        <span className="flex h-5 items-center justify-center">
+                                          {isSmart ? (
+                                            <span className="border-current/80 flex size-4 items-center justify-center rounded border">
+                                              <span className="border-current/80 size-1.5 rounded-sm border" />
+                                            </span>
+                                          ) : (
+                                            <span
+                                              className={cn(
+                                                'border-current/80 rounded-sm border',
+                                                isPortrait ? 'h-4 w-2.5' : 'h-2.5 w-4',
+                                              )}
+                                            />
+                                          )}
+                                        </span>
+                                        <span>{option.label}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <div className="text-xs text-text-secondary">
+                                  {localize('com_ui_select_resolution')}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 rounded-xl bg-surface-secondary p-1">
+                                  {[
+                                    { value: '2K', label: localize('com_ui_hd_2k') },
+                                    { value: '4K', label: localize('com_ui_ultra_4k') },
+                                  ].map((option) => (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={() => setOption('imageResolution')(option.value)}
+                                      className={cn(
+                                        'h-9 rounded-lg px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-hover',
+                                        selectedImageResolution === option.value &&
+                                          'bg-surface-hover shadow-sm',
+                                      )}
+                                    >
+                                      {option.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <div className="text-xs text-text-secondary">
+                                  {localize('com_ui_select_image_count')}
+                                </div>
+                                <div className="grid grid-cols-5 gap-1.5 rounded-xl bg-surface-secondary p-1.5">
+                                  {imageMaxImageOptions.map((count) => (
+                                    <button
+                                      key={count}
+                                      type="button"
+                                      aria-label={`${localize('com_ui_select_image_count')} ${count}`}
+                                      onClick={() => setOption('imageMaxImages')(count)}
+                                      className={cn(
+                                        'h-8 rounded-lg px-2 text-sm font-medium text-text-primary transition-colors hover:bg-surface-hover',
+                                        selectedImageMaxImages === count &&
+                                          'bg-surface-hover shadow-sm',
+                                      )}
+                                    >
+                                      {count}
+                                      {localize('com_ui_image_count_suffix')}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </PopoverRoot>
+                      </>
+                    ) : (
+                      <Dropdown
+                        value={selectedImageSize}
+                        onChange={setOption('imageSize')}
+                        options={imageSizeOptions}
+                        ariaLabel={localize('com_ui_size')}
+                        className="text-text-primary/85 hover:bg-surface-hover/50 min-w-[92px] border-transparent bg-transparent"
+                        sizeClasses="w-[140px]"
+                      />
+                    )}
+                    {showImageInheritanceHint && (
+                      <span className="hidden text-xs text-text-secondary sm:inline">
+                        {localize('com_ui_image_inherit_hint')}
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
               {!imageModeEnabled && (

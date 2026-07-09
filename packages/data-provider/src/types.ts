@@ -49,6 +49,11 @@ export type TEndpointOption = Pick<
   | 'stop'
   | 'region'
   | 'additionalModelRequestFields'
+  // Image mode
+  | 'imageSize'
+  | 'imageResolution'
+  | 'imageMaxImages'
+  | 'inheritPreviousImage'
   // Anthropic-specific
   | 'promptCache'
   | 'thinking'

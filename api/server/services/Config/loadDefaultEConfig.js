@@ -20,6 +20,7 @@ async function loadDefaultEndpointsConfig(appConfig) {
     [EModelEndpoint.azureAssistants]: azureAssistants,
     [EModelEndpoint.azureOpenAI]: azureOpenAI,
     [EModelEndpoint.google]: google,
+    [EModelEndpoint.doubao]: config[EModelEndpoint.doubao],
     [EModelEndpoint.chatGPTBrowser]: chatGPTBrowser,
     [EModelEndpoint.gptPlugins]: gptPlugins,
     [EModelEndpoint.anthropic]: config[EModelEndpoint.anthropic],

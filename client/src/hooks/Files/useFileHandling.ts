@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   QueryKeys,
   Constants,
+  EModelEndpoint,
   EToolResources,
   mergeFileConfig,
   isAssistantsEndpoint,
@@ -29,6 +30,35 @@ type UseFileHandling = {
   fileSetter?: FileSetter;
   fileFilter?: (file: File) => boolean;
   additionalMetadata?: Record<string, string | undefined>;
+};
+
+const getImageModeUploadLimit = ({
+  endpoint,
+  endpointType,
+}: {
+  endpoint?: string | null;
+  endpointType?: string | null;
+}) => {
+  const imageEndpoint = endpointType ?? endpoint;
+  if (imageEndpoint === EModelEndpoint.openAI) {
+    return {
+      max: 16,
+      errorKey: 'com_ui_openai_image_edit_upload_limit',
+    };
+  }
+  if (imageEndpoint === EModelEndpoint.google || imageEndpoint === EModelEndpoint.doubao) {
+    return {
+      max: 14,
+      errorKey:
+        imageEndpoint === EModelEndpoint.google
+          ? 'com_ui_google_image_edit_upload_limit'
+          : 'com_ui_doubao_image_edit_upload_limit',
+    };
+  }
+  return {
+    max: 1,
+    errorKey: 'com_ui_image_edit_single_upload_only',
+  };
 };
 
 const useFileHandling = (params?: UseFileHandling) => {
@@ -250,13 +280,14 @@ const useFileHandling = (params?: UseFileHandling) => {
     const fileList = Array.from(_files);
 
     if (conversation?.mode === 'image' && (_toolResource == null || _toolResource === '')) {
+      const imageUploadLimit = getImageModeUploadLimit({ endpoint, endpointType });
       const existingImageCount = Array.from(files.values()).filter((file) =>
         file.type?.startsWith('image/'),
       ).length;
       const incomingImageCount = fileList.filter((file) => file.type.startsWith('image/')).length;
 
-      if (existingImageCount + incomingImageCount > 1) {
-        setError('com_ui_image_edit_single_upload_only');
+      if (existingImageCount + incomingImageCount > imageUploadLimit.max) {
+        setError(imageUploadLimit.errorKey);
         setFilesLoading(false);
         return;
       }

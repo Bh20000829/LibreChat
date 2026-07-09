@@ -12,6 +12,7 @@ import Sources from '~/components/Web/Sources';
 import { mapAttachments } from '~/utils/map';
 import { EditTextPart } from './Parts';
 import Part from './Part';
+import type { ImageDisplaySize } from './Image';
 
 type ContentPartsProps = {
   content: Array<TMessageContentParts | undefined> | undefined;
@@ -31,6 +32,45 @@ type ContentPartsProps = {
     | ((value: number) => void | React.Dispatch<React.SetStateAction<number>>)
     | null
     | undefined;
+};
+
+const isImageContentPart = (part: TMessageContentParts | undefined): part is TMessageContentParts =>
+  part?.type === ContentTypes.IMAGE_FILE || part?.type === ContentTypes.IMAGE_URL;
+
+const getImagePartAspectRatio = (part: TMessageContentParts | undefined) => {
+  if (!part) {
+    return 1;
+  }
+
+  if (part.type === ContentTypes.IMAGE_FILE) {
+    const imageFile = part[ContentTypes.IMAGE_FILE];
+    const width = Number(imageFile?.width);
+    const height = Number(imageFile?.height);
+
+    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+      return width / height;
+    }
+  }
+
+  return 1;
+};
+
+const getImageGroupLayout = (
+  imageParts: Array<{ imagePart: TMessageContentParts; partIndex: number }>,
+): { className: string; displaySize: ImageDisplaySize } => {
+  const aspectRatio = getImagePartAspectRatio(imageParts[0]?.imagePart);
+
+  if (aspectRatio >= 1.15) {
+    return {
+      className: 'grid w-full max-w-[980px] grid-cols-1 items-start gap-4 sm:grid-cols-2',
+      displaySize: 'wide-thumbnail',
+    };
+  }
+
+  return {
+    className: 'grid w-full max-w-[940px] grid-cols-2 items-start gap-4 sm:grid-cols-4',
+    displaySize: 'thumbnail',
+  };
 };
 
 const ContentParts = memo(
@@ -145,6 +185,60 @@ const ContentParts = memo(
           {content.map((part, idx) => {
             if (!part) {
               return null;
+            }
+
+            if (isImageContentPart(part)) {
+              if (idx > 0 && isImageContentPart(content[idx - 1])) {
+                return null;
+              }
+
+              const imageParts: Array<{
+                imagePart: TMessageContentParts;
+                partIndex: number;
+              }> = [];
+              for (let partIndex = idx; partIndex < content.length; partIndex++) {
+                const imagePart = content[partIndex];
+                if (!isImageContentPart(imagePart)) {
+                  break;
+                }
+                imageParts.push({ imagePart, partIndex });
+              }
+
+              if (imageParts.length > 1) {
+                const imageGroupLayout = getImageGroupLayout(imageParts);
+
+                return (
+                  <div
+                    key={`image-group-${messageId}-${idx}`}
+                    className={imageGroupLayout.className}
+                  >
+                    {imageParts.map(({ imagePart, partIndex }) => (
+                      <MessageContext.Provider
+                        key={`provider-${messageId}-${partIndex}`}
+                        value={{
+                          messageId,
+                          isExpanded: true,
+                          conversationId,
+                          partIndex,
+                          nextType: content[partIndex + 1]?.type,
+                          isSubmitting: effectiveIsSubmitting,
+                          isLatestMessage,
+                        }}
+                      >
+                        <Part
+                          part={imagePart}
+                          imagePrompt={imagePrompt}
+                          imageDisplaySize={imageGroupLayout.displaySize}
+                          isSubmitting={effectiveIsSubmitting}
+                          isCreatedByUser={isCreatedByUser}
+                          isLast={partIndex === content.length - 1}
+                          showCursor={partIndex === content.length - 1 && isLast}
+                        />
+                      </MessageContext.Provider>
+                    ))}
+                  </div>
+                );
+              }
             }
 
             const toolCallId =

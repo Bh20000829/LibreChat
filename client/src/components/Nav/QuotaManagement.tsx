@@ -239,7 +239,7 @@ export default function QuotaManagement({ open, onOpenChange }: TDialogProps) {
                   </div>
                 )}
 
-                <div className="max-h-[520px] overflow-auto rounded-lg border border-border-light">
+                <div className="quota-table-scrollbar max-h-[520px] overflow-auto overscroll-contain rounded-lg border border-border-light pb-1">
                   <table className="min-w-[1580px] divide-y divide-border-light text-sm">
                     <thead className="bg-surface-secondary text-left text-text-secondary">
                       <tr>

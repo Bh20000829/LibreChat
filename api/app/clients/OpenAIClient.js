@@ -778,7 +778,6 @@ class OpenAIClient extends BaseClient {
   }
 
   async generateImage(params = {}, abortController = null) {
-    const startedAt = Date.now();
     if (!abortController) {
       abortController = new AbortController();
     }
@@ -796,6 +795,8 @@ class OpenAIClient extends BaseClient {
       style,
       response_format,
       user,
+      onProviderRequest,
+      onProviderResponse,
     } = params;
 
     const baseURL = extractBaseURL(this.completionsUrl);
@@ -835,6 +836,13 @@ class OpenAIClient extends BaseClient {
       apiKey: this.apiKey,
       ...opts,
     });
+    const headers = {
+      ...(opts.defaultHeaders ?? {}),
+      ...(process.env.OPENAI_ORGANIZATION
+        ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION }
+        : {}),
+      Authorization: `Bearer ${this.apiKey}`,
+    };
 
     const imageRequest = {
       model: model ?? this.modelOptions.model,
@@ -848,42 +856,41 @@ class OpenAIClient extends BaseClient {
       style,
       response_format,
       user,
-      ...(output_format === 'webp' || output_format === 'jpeg'
-        ? { output_compression }
-        : {}),
+      ...(output_format === 'webp' || output_format === 'jpeg' ? { output_compression } : {}),
     };
 
-    logger.info('[OpenAIClient] generateImage request', {
+    const providerRequestLog = {
+      provider: 'openAI',
       url: `${baseURL}/images/generations`,
-      model: imageRequest.model,
-      prompt: imageRequest.prompt,
+      method: 'POST',
+      headers,
       body: imageRequest,
-    });
+    };
+    // console.log('[AI接口请求内容]', JSON.stringify(providerRequestLog, null, 2));
+    onProviderRequest?.(providerRequestLog);
 
-    const response = await openai.images.generate(imageRequest, {
-      signal: abortController.signal,
-    });
-
-    logger.info('[OpenAIClient] generateImage response', {
-      url: `${baseURL}/images/generations`,
-      durationMs: Date.now() - startedAt,
-      created: response?.created,
-      output_format: response?.output_format,
-      usage: response?.usage,
-      data: Array.isArray(response?.data)
-        ? response.data.map((item) => ({
-            has_b64_json: typeof item?.b64_json === 'string' && item.b64_json.length > 0,
-            revised_prompt: item?.revised_prompt,
-            url: item?.url,
-          }))
-        : response?.data,
-    });
+    let response;
+    try {
+      response = await openai.images.generate(imageRequest, {
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      const providerErrorResponse = {
+        status: error?.status,
+        headers: error?.headers,
+        body: error?.error ?? error?.response?.data ?? error?.message,
+      };
+      // console.log('[AI接口返回内容]', JSON.stringify(providerErrorResponse, null, 2));
+      onProviderResponse?.(providerErrorResponse);
+      throw error;
+    }
+    // console.log('[AI接口返回内容]', JSON.stringify(response, null, 2));
+    onProviderResponse?.(response);
 
     return response;
   }
 
   async editImage(params = {}, abortController = null) {
-    const startedAt = Date.now();
     if (!abortController) {
       abortController = new AbortController();
     }
@@ -902,6 +909,8 @@ class OpenAIClient extends BaseClient {
       output_compression,
       moderation,
       user,
+      onProviderRequest,
+      onProviderResponse,
     } = params;
 
     if (!Array.isArray(imageFiles) || imageFiles.length === 0) {
@@ -980,32 +989,57 @@ class OpenAIClient extends BaseClient {
       axiosConfig.httpsAgent = new HttpsProxyAgent(this.options.proxy);
     }
 
-    logger.info('[OpenAIClient] editImage request', {
+    const editRequestLog = {
+      provider: 'openAI',
       url: `${baseURL}/images/edits`,
-      model: model ?? this.modelOptions.model,
-      prompt,
-      size,
-      quality,
-      imageCount: imageFiles.length,
-      hasMask: !!maskFile,
-    });
+      method: 'POST',
+      headers,
+      body: {
+        model: model ?? this.modelOptions.model,
+        prompt,
+        n: Math.min(Math.max(Number(n) || 1, 1), 10),
+        size,
+        quality,
+        background,
+        input_fidelity,
+        output_format,
+        output_compression:
+          output_format === 'webp' || output_format === 'jpeg' ? output_compression : undefined,
+        moderation,
+        user,
+        images: imageFiles.slice(0, 16).map((imageFile) => ({
+          filename: imageFile.filename,
+          contentType: imageFile.type,
+          data: imageFile.buffer?.toString('base64'),
+        })),
+        mask: maskFile?.buffer
+          ? {
+              filename: maskFile.filename,
+              contentType: maskFile.type,
+              data: maskFile.buffer.toString('base64'),
+            }
+          : undefined,
+      },
+    };
+    // console.log('[AI接口请求内容]', JSON.stringify(editRequestLog, null, 2));
+    onProviderRequest?.(editRequestLog);
 
-    const response = await axios.post('/images/edits', formData, axiosConfig);
-
-    logger.info('[OpenAIClient] editImage response', {
-      url: `${baseURL}/images/edits`,
-      durationMs: Date.now() - startedAt,
-      created: response?.data?.created,
-      output_format: response?.data?.output_format,
-      usage: response?.data?.usage,
-      data: Array.isArray(response?.data?.data)
-        ? response.data.data.map((item) => ({
-            has_b64_json: typeof item?.b64_json === 'string' && item.b64_json.length > 0,
-            revised_prompt: item?.revised_prompt,
-            url: item?.url,
-          }))
-        : response?.data?.data,
-    });
+    let response;
+    try {
+      response = await axios.post('/images/edits', formData, axiosConfig);
+    } catch (error) {
+      const providerErrorResponse = {
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        headers: error?.response?.headers,
+        body: error?.response?.data ?? error?.message,
+      };
+      // console.log('[AI接口返回内容]', JSON.stringify(providerErrorResponse, null, 2));
+      onProviderResponse?.(providerErrorResponse);
+      throw error;
+    }
+    // console.log('[AI接口返回内容]', JSON.stringify(response.data, null, 2));
+    onProviderResponse?.(response.data);
 
     return response.data;
   }
@@ -1282,10 +1316,6 @@ class OpenAIClient extends BaseClient {
             handleOpenAIErrors(err, errorCallback, 'stream');
           })
           .on('finalChatCompletion', async (finalChatCompletion) => {
-            // LC_DEBUG_RAW_RESPONSE_DELETE_ME
-            console.log('[LC_DEBUG_RAW_RESPONSE_DELETE_ME][openai][finalChatCompletion]', {
-              data: finalChatCompletion,
-            });
             const finalMessage = finalChatCompletion?.choices?.[0]?.message;
             if (!finalMessage) {
               return;
@@ -1325,10 +1355,6 @@ class OpenAIClient extends BaseClient {
         }
 
         for await (const chunk of stream) {
-          // LC_DEBUG_RAW_RESPONSE_DELETE_ME
-          console.log('[LC_DEBUG_RAW_RESPONSE_DELETE_ME][openai][stream_chunk]', {
-            data: chunk,
-          });
           // Add finish_reason: null if missing in any choice
           if (chunk.choices) {
             chunk.choices.forEach((choice) => {
@@ -1363,10 +1389,6 @@ class OpenAIClient extends BaseClient {
           .catch((err) => {
             handleOpenAIErrors(err, errorCallback, 'create');
           });
-        // LC_DEBUG_RAW_RESPONSE_DELETE_ME
-        console.log('[LC_DEBUG_RAW_RESPONSE_DELETE_ME][openai][completion_response]', {
-          data: chatCompletion,
-        });
       }
 
       if (openai.abortHandler && abortController.signal) {

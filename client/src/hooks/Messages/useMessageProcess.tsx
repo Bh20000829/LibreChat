@@ -103,7 +103,9 @@ export default function useMessageProcess({ message }: { message?: TMessage | nu
         depth: message.depth,
       });
       setSiblingMessage(newSibling);
+      return;
     }
+    setSiblingMessage(null);
   }, [hasNoChildren, latestMultiMessage, message, setSiblingMessage, latestMessage]);
 
   return {

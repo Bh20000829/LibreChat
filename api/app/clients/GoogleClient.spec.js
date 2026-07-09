@@ -107,36 +107,41 @@ jest.mock('./BaseClient', () => {
 });
 
 const { getSafetySettings } = require('@librechat/api');
-const { logger } = require('@librechat/data-schemas');
 const { googleGenConfigSchema } = require('librechat-data-provider');
 const GoogleClient = require('./GoogleClient');
 
 describe('GoogleClient.generateImage', () => {
-  test('sends imageConfig when a Google image aspect ratio is provided', async () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('sends generateContent image request with responseFormat image options', async () => {
     const fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({ candidates: [] }),
+      text: jest.fn().mockResolvedValue(JSON.stringify({ candidates: [] })),
     });
     const client = new GoogleClient({}, { skipSetOptions: true });
 
     client.fetch = fetch;
+    client.reverseProxyUrl = 'https://api.duckcoding.ai';
     client.apiKey = 'test-google-key';
     client.authHeader = false;
     client.modelOptions = {
-      model: 'gemini-3-pro-image-preview',
+      model: 'gemini-3-pro-image',
       temperature: 0.4,
     };
     client.systemMessage = '';
 
-    await client.generateImage({
-      prompt: '小猪吃饭',
-      model: 'gemini-3-pro-image-preview',
-      size: '16:9',
+    const result = await client.generateImage({
+      prompt: 'dog barking',
+      model: 'gemini-3-pro-image',
+      size: '1:1',
     });
 
-    expect(googleGenConfigSchema.parse).toHaveBeenCalledWith(client.modelOptions);
+    expect(result).toEqual({ candidates: [] });
+    expect(googleGenConfigSchema.parse).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledWith(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
+      'https://api.duckcoding.ai/v1/models/gemini-3-pro-image:generateContent',
       expect.objectContaining({
         method: 'POST',
         signal: expect.any(AbortSignal),
@@ -153,68 +158,184 @@ describe('GoogleClient.generateImage', () => {
     );
 
     const requestOptions = JSON.parse(init.body);
-    expect(requestOptions.generationConfig).toEqual(
-      expect.objectContaining({
-        candidateCount: 1,
-        responseModalities: ['Image'],
-        temperature: 0.4,
-        imageConfig: {
-          aspectRatio: '16:9',
+    expect(requestOptions).toEqual({
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: 'dog barking' }],
         },
-      }),
-    );
-    expect(requestOptions.config).toBeUndefined();
-    expect(requestOptions.contents[0].parts).toEqual([{ text: '小猪吃饭' }]);
+      ],
+      generationConfig: {
+        responseModalities: ['TEXT', 'IMAGE'],
+        responseFormat: {
+          image: {
+            aspectRatio: '1:1',
+            imageSize: '2K',
+          },
+        },
+      },
+    });
+    expect(requestOptions.tools).toBeUndefined();
+    expect(requestOptions.response_format).toBeUndefined();
+    expect(requestOptions.generationConfig.imageConfig).toBeUndefined();
     expect(getSafetySettings).not.toHaveBeenCalled();
   });
 
-  test('retries without imageConfig when the upstream rejects it', async () => {
-    const fetch = jest
-      .fn()
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        text: jest.fn().mockResolvedValue('Unknown name "imageConfig" at "generation_config"'),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: jest.fn().mockResolvedValue({ candidates: [] }),
-      });
+  test('normalizes pixel size values to generateContent responseFormat aspect ratio', async () => {
+    const fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: jest.fn().mockResolvedValue(JSON.stringify({ candidates: [] })),
+    });
     const client = new GoogleClient({}, { skipSetOptions: true });
 
     client.fetch = fetch;
-    client.reverseProxyUrl = 'https://api.openai-proxy.org/google';
+    client.reverseProxyUrl = 'https://api.openai-proxy.org/google/v1beta';
     client.apiKey = 'test-google-key';
     client.authHeader = false;
     client.modelOptions = {
-      model: 'gemini-3-pro-image-preview',
+      model: 'gemini-3.1-flash-image',
       temperature: 0.4,
     };
     client.systemMessage = '';
 
     await client.generateImage({
-      prompt: '小猪吃饭',
+      prompt: 'dog barking',
+      model: 'gemini-3.1-flash-image',
+      size: '1536x1024',
+      imageSize: '4K',
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe(
+      'https://api.openai-proxy.org/google/v1beta/models/gemini-3.1-flash-image:generateContent',
+    );
+
+    const requestOptions = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(requestOptions.generationConfig.responseFormat.image).toEqual({
+      aspectRatio: '3:2',
+      imageSize: '4K',
+    });
+    expect(requestOptions.generationConfig.imageConfig).toBeUndefined();
+    expect(requestOptions.response_format).toBeUndefined();
+  });
+
+  test('sends REST inline image data for image-to-image requests', async () => {
+    const fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: jest.fn().mockResolvedValue(JSON.stringify({ candidates: [] })),
+    });
+    const client = new GoogleClient({}, { skipSetOptions: true });
+
+    client.fetch = fetch;
+    client.reverseProxyUrl = 'https://api.duckcoding.ai';
+    client.apiKey = 'test-google-key';
+    client.authHeader = false;
+    client.modelOptions = {
+      model: 'gemini-3-pro-image-preview',
+    };
+    client.systemMessage = '';
+
+    await client.generateImage({
+      prompt: 'make it warmer',
       model: 'gemini-3-pro-image-preview',
       size: '16:9',
+      imageFiles: [
+        {
+          type: 'image/png',
+          buffer: Buffer.from('image-bytes'),
+        },
+      ],
     });
 
-    expect(fetch).toHaveBeenCalledTimes(2);
+    const requestOptions = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(requestOptions.contents[0].parts).toEqual([
+      { text: 'make it warmer' },
+      {
+        inline_data: {
+          mime_type: 'image/png',
+          data: Buffer.from('image-bytes').toString('base64'),
+        },
+      },
+    ]);
+    expect(requestOptions.contents[0].parts[1].inlineData).toBeUndefined();
+  });
 
-    const firstRequestOptions = JSON.parse(fetch.mock.calls[0][1].body);
-    expect(firstRequestOptions.generationConfig.imageConfig).toEqual({
-      aspectRatio: '16:9',
+  test('sends multiple REST inline images for image-to-image requests', async () => {
+    const fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: jest.fn().mockResolvedValue(JSON.stringify({ candidates: [] })),
+    });
+    const client = new GoogleClient({}, { skipSetOptions: true });
+
+    client.fetch = fetch;
+    client.reverseProxyUrl = 'https://api.duckcoding.ai';
+    client.apiKey = 'test-google-key';
+    client.authHeader = false;
+    client.modelOptions = {
+      model: 'gemini-3-pro-image-preview',
+    };
+    client.systemMessage = '';
+
+    await client.generateImage({
+      prompt: 'combine these references',
+      model: 'gemini-3-pro-image-preview',
+      size: '1:1',
+      imageFiles: [
+        {
+          type: 'image/png',
+          buffer: Buffer.from('first-image'),
+        },
+        {
+          type: 'image/jpeg',
+          buffer: Buffer.from('second-image'),
+        },
+      ],
     });
 
-    const secondRequestOptions = JSON.parse(fetch.mock.calls[1][1].body);
-    expect(secondRequestOptions.generationConfig.imageConfig).toBeUndefined();
-    expect(logger.warn).toHaveBeenCalledWith(
-      '[GoogleClient] Retrying image generation without imageConfig',
-      expect.objectContaining({
-        model: 'gemini-3-pro-image-preview',
-        size: '16:9',
-        reverseProxyUrl: 'https://api.openai-proxy.org/google',
-      }),
-    );
+    const requestOptions = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(requestOptions.contents[0].parts).toEqual([
+      { text: 'combine these references' },
+      {
+        inline_data: {
+          mime_type: 'image/png',
+          data: Buffer.from('first-image').toString('base64'),
+        },
+      },
+      {
+        inline_data: {
+          mime_type: 'image/jpeg',
+          data: Buffer.from('second-image').toString('base64'),
+        },
+      },
+    ]);
+  });
+
+  test('omits imageSize for preview models without documented 2K support', async () => {
+    const fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: jest.fn().mockResolvedValue(JSON.stringify({ candidates: [] })),
+    });
+    const client = new GoogleClient({}, { skipSetOptions: true });
+
+    client.fetch = fetch;
+    client.reverseProxyUrl = 'https://api.duckcoding.ai';
+    client.apiKey = 'test-google-key';
+    client.authHeader = false;
+    client.modelOptions = {
+      model: 'gemini-3.1-flash-image-preview',
+    };
+    client.systemMessage = '';
+
+    await client.generateImage({
+      prompt: 'dog barking',
+      model: 'gemini-3.1-flash-image-preview',
+      size: '1:1',
+      imageSize: '2K',
+    });
+
+    const requestOptions = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(requestOptions.generationConfig.responseFormat.image).toEqual({
+      aspectRatio: '1:1',
+    });
   });
 });

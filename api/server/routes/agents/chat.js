@@ -42,9 +42,13 @@ router.use(setHeaders);
 
 const controller = async (req, res, next) => {
   if (req.body?.mode === 'image') {
-    if (![EModelEndpoint.openAI, EModelEndpoint.google].includes(req.body?.endpoint)) {
+    if (
+      ![EModelEndpoint.openAI, EModelEndpoint.google, EModelEndpoint.doubao].includes(
+        req.body?.endpoint,
+      )
+    ) {
       return handleError(res, {
-        text: 'Image generation is only supported for OpenAI and Google right now',
+        text: 'Image generation is only supported for OpenAI, Google, and Doubao right now',
       });
     }
 

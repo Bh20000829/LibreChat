@@ -34,6 +34,7 @@ export type EndpointSchemaKey = Exclude<EModelEndpoint, EModelEndpoint.chatGPTBr
 const endpointSchemas: Record<EndpointSchemaKey, EndpointSchema> = {
   [EModelEndpoint.openAI]: openAISchema,
   [EModelEndpoint.azureOpenAI]: openAISchema,
+  [EModelEndpoint.doubao]: openAISchema,
   [EModelEndpoint.custom]: openAISchema,
   [EModelEndpoint.google]: googleSchema,
   [EModelEndpoint.anthropic]: anthropicSchema,
@@ -57,6 +58,7 @@ export function getEnabledEndpoints() {
     EModelEndpoint.azureAssistants,
     EModelEndpoint.azureOpenAI,
     EModelEndpoint.google,
+    EModelEndpoint.doubao,
     EModelEndpoint.chatGPTBrowser,
     EModelEndpoint.gptPlugins,
     EModelEndpoint.anthropic,
@@ -268,6 +270,10 @@ export const getResponseSender = (endpointOption: t.TEndpointOption): string => 
     return 'Gemini';
   }
 
+  if (endpoint === EModelEndpoint.doubao) {
+    return modelLabel || modelDisplayLabel || 'Doubao';
+  }
+
   if (endpoint === EModelEndpoint.custom || endpointType === EModelEndpoint.custom) {
     if (modelLabel) {
       return modelLabel;
@@ -309,6 +315,7 @@ const compactEndpointSchemas: Record<EndpointSchemaKey, CompactEndpointSchema> =
   [EModelEndpoint.azureAssistants]: compactAssistantSchema,
   [EModelEndpoint.agents]: compactAgentsSchema,
   [EModelEndpoint.google]: compactGoogleSchema,
+  [EModelEndpoint.doubao]: openAISchema,
   [EModelEndpoint.bedrock]: bedrockInputSchema,
   [EModelEndpoint.anthropic]: anthropicSchema,
   [EModelEndpoint.gptPlugins]: compactPluginsSchema,

@@ -29,7 +29,7 @@ import store, { useGetEphemeralAgent } from '~/store';
 import useUserKey from '~/hooks/Input/useUserKey';
 import { useNavigate } from 'react-router-dom';
 import { useAuthContext } from '~/hooks';
-import { logger } from '~/utils';
+import { canInheritFromImageMessage, logger } from '~/utils';
 
 const logChatRequest = (request: Record<string, unknown>) => {
   logger.log('=====================================\nAsk function called with:');
@@ -89,6 +89,7 @@ export default function useChatFunctions({
       isEdited = false,
       overrideMessages,
       overrideFiles,
+      overrideConversation,
     } = {},
   ) => {
     setShowStopButton(false);
@@ -97,7 +98,14 @@ export default function useChatFunctions({
       return;
     }
 
-    const conversation = cloneDeep(immutableConversation);
+    const conversation = cloneDeep(
+      overrideConversation != null
+        ? {
+            ...(immutableConversation ?? {}),
+            ...overrideConversation,
+          }
+        : immutableConversation,
+    );
 
     const endpoint = conversation?.endpoint;
     if (endpoint === null) {
@@ -191,7 +199,20 @@ export default function useChatFunctions({
       endpointOption.thread_id = thread_id;
       endpointOption.modelDisplayLabel = modelDisplayLabel;
       if (conversation?.mode === 'image') {
+        const imageEndpoint =
+          conversation.endpointType ?? conversation.endpoint ?? endpointType ?? endpoint;
+        const isDoubaoImageEndpoint = imageEndpoint === EModelEndpoint.doubao;
+        const hasUserProvidedImage =
+          (files?.size ?? 0) > 0 || (overrideFiles != null && overrideFiles.length > 0);
         endpointOption.imageSize = conversation?.imageSize ?? '1:1';
+        endpointOption.imageResolution = conversation?.imageResolution ?? '2K';
+        if (isDoubaoImageEndpoint) {
+          endpointOption.imageMaxImages = conversation?.imageMaxImages ?? 1;
+        }
+        endpointOption.inheritPreviousImage =
+          (conversation?.inheritPreviousImage ?? true) &&
+          !hasUserProvidedImage &&
+          canInheritFromImageMessage(latestMessage);
       }
     } else {
       endpointOption.key = new Date(Date.now() + 60 * 60 * 1000).toISOString();

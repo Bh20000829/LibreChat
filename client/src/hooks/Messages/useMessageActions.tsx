@@ -1,4 +1,4 @@
-import { useRecoilValue } from 'recoil';
+import { useRecoilValue, useResetRecoilState } from 'recoil';
 import { useCallback, useMemo, useState } from 'react';
 import { useUpdateFeedbackMutation } from 'librechat-data-provider/react-query';
 import {
@@ -10,6 +10,7 @@ import {
   toMinimalFeedback,
   SearchResultData,
 } from 'librechat-data-provider';
+import type { TMessage } from 'librechat-data-provider';
 import type { TMessageProps } from '~/common';
 import {
   useChatContext,
@@ -30,6 +31,47 @@ export type TMessageActions = Pick<
   searchResults?: { [key: string]: SearchResultData };
 };
 
+const pruneSiblingBranches = (
+  messages: TMessage[],
+  parentMessageId: string | null | undefined,
+  selectedMessageId: string | null | undefined,
+) => {
+  if (!parentMessageId || !selectedMessageId) {
+    return messages;
+  }
+
+  const childrenByParent = new Map<string, TMessage[]>();
+  for (const currentMessage of messages) {
+    if (!currentMessage.parentMessageId) {
+      continue;
+    }
+    const children = childrenByParent.get(currentMessage.parentMessageId) ?? [];
+    children.push(currentMessage);
+    childrenByParent.set(currentMessage.parentMessageId, children);
+  }
+
+  const idsToRemove = new Set<string>();
+  const queue = (childrenByParent.get(parentMessageId) ?? [])
+    .filter((currentMessage) => currentMessage.messageId !== selectedMessageId)
+    .map((currentMessage) => currentMessage.messageId)
+    .filter((messageId): messageId is string => !!messageId);
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    if (!currentId || idsToRemove.has(currentId)) {
+      continue;
+    }
+    idsToRemove.add(currentId);
+    for (const child of childrenByParent.get(currentId) ?? []) {
+      if (child.messageId) {
+        queue.push(child.messageId);
+      }
+    }
+  }
+
+  return messages.filter((currentMessage) => !idsToRemove.has(currentMessage.messageId ?? ''));
+};
+
 export default function useMessageActions(props: TMessageActions) {
   const localize = useLocalize();
   const { user } = useAuthContext();
@@ -40,13 +82,22 @@ export default function useMessageActions(props: TMessageActions) {
     ask,
     index,
     regenerate,
+    getMessages,
+    setMessages,
     latestMessage,
     handleContinue,
     setLatestMessage,
+    setConversation: setRootConversation,
     conversation: rootConvo,
     isSubmitting: isSubmittingRoot,
   } = useChatContext();
-  const { conversation: addedConvo, isSubmitting: isSubmittingAdditional } = useAddedChatContext();
+  const {
+    conversation: addedConvo,
+    getMessages: getAddedMessages,
+    setMessages: setAddedMessages,
+    setConversation: setAddedConversation,
+    isSubmitting: isSubmittingAdditional,
+  } = useAddedChatContext();
   const conversation = useMemo(
     () => (isMultiMessage === true ? addedConvo : rootConvo),
     [isMultiMessage, addedConvo, rootConvo],
@@ -54,6 +105,7 @@ export default function useMessageActions(props: TMessageActions) {
 
   const agentsMap = useAgentsMapContext();
   const assistantMap = useAssistantsMapContext();
+  const resetLatestMultiMessage = useResetRecoilState(store.latestMessageFamily(index + 1));
 
   const { text, content, messageId = null, isCreatedByUser } = message ?? {};
   const edit = useMemo(() => messageId === currentEditId, [messageId, currentEditId]);
@@ -119,6 +171,80 @@ export default function useMessageActions(props: TMessageActions) {
     regenerate(message);
   }, [isSubmitting, isCreatedByUser, message, regenerate]);
 
+  const selectMessageAsMainBranch = useCallback(() => {
+    if (!message || message.isCreatedByUser === true) {
+      return;
+    }
+
+    const rootConversationId = rootConvo?.conversationId ?? message.conversationId;
+    const addedMessages = getAddedMessages?.() ?? [];
+    const addedSourceMessage = addedMessages.find(
+      (currentMessage) => currentMessage.messageId === message.messageId,
+    );
+    const sourceMessage = isMultiMessage === true ? (addedSourceMessage ?? message) : message;
+    const parentMessageId =
+      isMultiMessage === true
+        ? (message.parentMessageId ?? latestMessage?.parentMessageId)
+        : sourceMessage.parentMessageId;
+    const selectedMessage = {
+      ...sourceMessage,
+      conversationId: rootConversationId,
+      parentMessageId,
+    };
+    const currentMessages = getMessages() ?? [];
+    let nextMessages = pruneSiblingBranches(
+      currentMessages,
+      parentMessageId,
+      selectedMessage.messageId,
+    );
+
+    if (
+      !nextMessages.some((currentMessage) => currentMessage.messageId === selectedMessage.messageId)
+    ) {
+      nextMessages = [...nextMessages, selectedMessage];
+    }
+
+    setMessages(nextMessages);
+    setLatestMessage({ ...selectedMessage });
+    resetLatestMultiMessage();
+    setAddedMessages([]);
+
+    if (isMultiMessage === true && addedConvo) {
+      setRootConversation((prevState) => {
+        const {
+          conversationId: _addedConversationId,
+          title: _addedTitle,
+          messages: _addedMessages,
+          ...addedOptions
+        } = addedConvo;
+
+        return {
+          ...prevState,
+          ...addedOptions,
+          conversationId: prevState?.conversationId ?? rootConvo?.conversationId ?? null,
+          title: prevState?.title ?? rootConvo?.title ?? '',
+          messages: prevState?.messages ?? rootConvo?.messages,
+        };
+      });
+    }
+
+    setAddedConversation(null);
+  }, [
+    message,
+    latestMessage,
+    getMessages,
+    getAddedMessages,
+    setMessages,
+    setAddedMessages,
+    addedConvo,
+    rootConvo,
+    isMultiMessage,
+    setLatestMessage,
+    setRootConversation,
+    resetLatestMultiMessage,
+    setAddedConversation,
+  ]);
+
   const copyToClipboard = useCopyToClipboard({ text, content, searchResults });
 
   // const messageLabel = useMemo(() => {
@@ -152,6 +278,7 @@ export default function useMessageActions(props: TMessageActions) {
     const endpointMap: Record<string, string> = {
       openai: 'OpenAI',
       google: 'Google',
+      doubao: 'Doubao',
       anthropic: 'Anthropic', // ← Claude 显示为 Anthropic
       groq: 'Groq',
       deepseek: 'DeepSeek',
@@ -160,7 +287,6 @@ export default function useMessageActions(props: TMessageActions) {
     let aiName = endpointMap[endpoint];
     // 如果 endpoint 未识别，则 fallback 到 assistant.name 或 agent.name
     if (!aiName) {
-
       aiName = agent?.name ?? assistant?.name ?? 'Assistant';
     }
     // 模型名称
@@ -215,6 +341,7 @@ export default function useMessageActions(props: TMessageActions) {
     handleContinue,
     copyToClipboard,
     setLatestMessage,
+    selectMessageAsMainBranch,
     regenerateMessage,
     handleFeedback,
     feedback,

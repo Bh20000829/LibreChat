@@ -11,6 +11,7 @@ const {
   CHATGPT_TOKEN: chatGPTToken,
   PLUGINS_USE_AZURE,
   GOOGLE_KEY: googleKey,
+  DOUBAO_IMAGE_KEY: doubaoImageKey,
   OPENAI_REVERSE_PROXY,
   AZURE_OPENAI_BASEURL,
   ASSISTANTS_BASE_URL,
@@ -23,6 +24,13 @@ const userProvidedOpenAI = useAzurePlugins
   ? isUserProvided(azureOpenAIApiKey)
   : isUserProvided(openAIApiKey);
 
+const hasDoubaoImageKey = Boolean(
+  doubaoImageKey ||
+    process.env.DOUBAO_IMAGE_KEY_1 ||
+    process.env.DOUBAO_IMAGE_KEY_2 ||
+    process.env.DOUBAO_IMAGE_KEY_3,
+);
+
 module.exports = {
   config: {
     openAIApiKey,
@@ -30,7 +38,12 @@ module.exports = {
     useAzurePlugins,
     userProvidedOpenAI,
     googleKey,
+    doubaoImageKey,
     [EModelEndpoint.anthropic]: generateConfig(anthropicApiKey),
+    [EModelEndpoint.doubao]: generateConfig(
+      hasDoubaoImageKey ? (doubaoImageKey || 'true') : '',
+      process.env.DOUBAO_IMAGE_BASEURL || process.env.DOUBAO_IMAGE_REVERSE_PROXY,
+    ),
     [EModelEndpoint.chatGPTBrowser]: generateConfig(chatGPTToken),
     [EModelEndpoint.openAI]: generateConfig(openAIApiKey, OPENAI_REVERSE_PROXY),
     [EModelEndpoint.azureOpenAI]: generateConfig(azureOpenAIApiKey, AZURE_OPENAI_BASEURL),

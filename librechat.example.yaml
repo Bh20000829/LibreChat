@@ -94,7 +94,7 @@ interface:
     groups: true
     roles: true
   marketplace:
-      use: false
+    use: false
   fileCitations: true
   # Temporary chat retention period in hours (default: 720, min: 1, max: 8760)
   # temporaryChatRetention: 1
@@ -193,6 +193,10 @@ actions:
 
 # Definition of custom endpoints
 endpoints:
+  # doubao:
+  #   # Set to false to disable the "AI generated" watermark on Doubao images.
+  #   imageWatermark: false
+
   # assistants:
   #   disableBuilder: false # Disable Assistants Builder Interface by setting to `true`
   #   pollIntervalMs: 3000  # Polling interval for checking assistant updates
@@ -291,7 +295,7 @@ endpoints:
       apiKey: '${OPENROUTER_KEY}'
       baseURL: 'https://openrouter.ai/api/v1'
       headers:
-          x-librechat-body-parentmessageid: '{{LIBRECHAT_BODY_PARENTMESSAGEID}}'
+        x-librechat-body-parentmessageid: '{{LIBRECHAT_BODY_PARENTMESSAGEID}}'
       models:
         default: ['meta-llama/llama-3-70b-instruct']
         fetch: true
@@ -308,9 +312,10 @@ endpoints:
       apiKey: '${HELICONE_KEY}'
       baseURL: 'https://ai-gateway.helicone.ai'
       headers:
-          x-librechat-body-parentmessageid: '{{LIBRECHAT_BODY_PARENTMESSAGEID}}'
+        x-librechat-body-parentmessageid: '{{LIBRECHAT_BODY_PARENTMESSAGEID}}'
       models:
-        default: ['gpt-4o-mini', 'claude-4.5-sonnet', 'llama-3.1-8b-instruct', 'gemini-2.5-flash-lite']
+        default:
+          ['gpt-4o-mini', 'claude-4.5-sonnet', 'llama-3.1-8b-instruct', 'gemini-2.5-flash-lite']
         fetch: true
       titleConvo: true
       titleModel: 'gpt-4o-mini'

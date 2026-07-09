@@ -8,10 +8,10 @@ import PlaceholderRow from '~/components/Chat/Messages/ui/PlaceholderRow';
 import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
 import HoverButtons from '~/components/Chat/Messages/HoverButtons';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
-import { useAttachments, useMessageActions } from '~/hooks';
+import { useAttachments, useLocalize, useMessageActions } from '~/hooks';
 import SubRow from '~/components/Chat/Messages/SubRow';
 import { fontSizeAtom } from '~/store/fontSize';
-import { cn, logger } from '~/utils';
+import { cn } from '~/utils';
 import store from '~/store';
 
 type ContentRenderProps = {
@@ -52,7 +52,7 @@ const ContentRender = memo(
       latestMessage,
       handleContinue,
       copyToClipboard,
-      setLatestMessage,
+      selectMessageAsMainBranch,
       regenerateMessage,
       handleFeedback,
     } = useMessageActions({
@@ -64,6 +64,7 @@ const ContentRender = memo(
     });
     const fontSize = useAtomValue(fontSizeAtom);
     const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
+    const localize = useLocalize();
 
     const handleRegenerateMessage = useCallback(() => regenerateMessage(), [regenerateMessage]);
     const isLast = useMemo(
@@ -94,20 +95,7 @@ const ContentRender = memo(
       ],
     );
 
-    const clickHandler = useMemo(
-      () =>
-        showCardRender && !isLatestMessage
-          ? () => {
-              logger.log(
-                'latest_message',
-                `Message Card click: Setting ${msg?.messageId} as latest message`,
-              );
-              logger.dir(msg);
-              setLatestMessage(msg!);
-            }
-          : undefined,
-      [showCardRender, isLatestMessage, msg, setLatestMessage],
-    );
+    const showKeepBranchButton = showCardRender && isCard && msg?.isCreatedByUser !== true;
 
     if (!msg) {
       return null;
@@ -123,7 +111,6 @@ const ContentRender = memo(
 
     const conditionalClasses = {
       latestCard: isLatestCard ? 'bg-surface-secondary' : '',
-      cardRender: showCardRender ? 'cursor-pointer transition-colors duration-300' : '',
       focus: 'focus:outline-none focus:ring-2 focus:ring-border-xheavy',
     };
 
@@ -135,18 +122,9 @@ const ContentRender = memo(
           baseClasses.common,
           isCard ? baseClasses.card : baseClasses.chat,
           conditionalClasses.latestCard,
-          conditionalClasses.cardRender,
           conditionalClasses.focus,
           'message-render',
         )}
-        onClick={clickHandler}
-        onKeyDown={(e) => {
-          if ((e.key === 'Enter' || e.key === ' ') && clickHandler) {
-            clickHandler();
-          }
-        }}
-        role={showCardRender ? 'button' : undefined}
-        tabIndex={showCardRender ? 0 : undefined}
       >
         {isLatestCard && (
           <div className="absolute right-0 top-0 m-2 h-3 w-3 rounded-full bg-text-primary" />
@@ -207,8 +185,19 @@ const ContentRender = memo(
                   handleContinue={handleContinue}
                   latestMessage={latestMessage}
                   handleFeedback={handleFeedback}
+                  isBranchComparison={isCard}
                   isLast={isLast}
                 />
+                {showKeepBranchButton && (
+                  <button
+                    type="button"
+                    onClick={selectMessageAsMainBranch}
+                    title={localize('com_ui_keep_branch')}
+                    className="rounded-lg px-2 py-1 text-text-secondary-alt transition-colors hover:bg-surface-hover hover:text-text-primary"
+                  >
+                    {localize('com_ui_keep_branch')}
+                  </button>
+                )}
               </SubRow>
             )}
           </div>

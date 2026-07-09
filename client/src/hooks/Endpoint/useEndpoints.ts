@@ -21,6 +21,8 @@ import { useHasAccess } from '~/hooks';
 import { icons } from './Icons';
 import useConversationMode from '~/hooks/Conversations/useConversationMode';
 
+const imageOnlyEndpoints = new Set<EModelEndpoint>([EModelEndpoint.doubao]);
+
 export const useEndpoints = ({
   agents,
   assistantsMap,
@@ -65,6 +67,9 @@ export const useEndpoints = ({
       if (endpoints[i] === EModelEndpoint.agents && !hasAgentAccess) {
         continue;
       }
+      if (mode !== 'image' && imageOnlyEndpoints.has(endpoints[i])) {
+        continue;
+      }
       if (includedEndpoints.size > 0 && !includedEndpoints.has(endpoints[i])) {
         continue;
       }
@@ -72,7 +77,7 @@ export const useEndpoints = ({
     }
 
     return result;
-  }, [endpoints, hasAgentAccess, includedEndpoints, interfaceConfig.modelSelect]);
+  }, [endpoints, hasAgentAccess, includedEndpoints, interfaceConfig.modelSelect, mode]);
 
   const endpointRequiresUserKey = useCallback(
     (ep: string) => {

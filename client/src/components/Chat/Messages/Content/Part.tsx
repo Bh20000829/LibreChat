@@ -18,6 +18,7 @@ import WebSearch from './WebSearch';
 import ToolCall from './ToolCall';
 import ImageGen from './ImageGen';
 import Image from './Image';
+import type { ImageDisplaySize } from './Image';
 
 type PartProps = {
   part?: TMessageContentParts;
@@ -27,6 +28,8 @@ type PartProps = {
   isCreatedByUser: boolean;
   attachments?: TAttachment[];
   imagePrompt?: string;
+  imageClassName?: string;
+  imageDisplaySize?: ImageDisplaySize;
 };
 
 const Part = memo(
@@ -38,6 +41,8 @@ const Part = memo(
     showCursor,
     isCreatedByUser,
     imagePrompt,
+    imageClassName,
+    imageDisplaySize,
   }: PartProps) => {
     if (!part) {
       return null;
@@ -216,11 +221,14 @@ const Part = memo(
           height={height}
           width={width}
           altText={imageFile.filename ?? 'Uploaded Image'}
+          className={imageClassName}
+          displaySize={imageDisplaySize}
           placeholderDimensions={{
             height: height + 'px',
             width: width + 'px',
           }}
           args={{ prompt: imagePrompt }}
+          showActions={!isCreatedByUser}
         />
       );
     } else if (part.type === ContentTypes.IMAGE_URL) {
@@ -237,11 +245,14 @@ const Part = memo(
           height={1024}
           width={1024}
           altText="Generated Image"
+          className={imageClassName}
+          displaySize={imageDisplaySize}
           placeholderDimensions={{
             height: '1024px',
             width: '1024px',
           }}
           args={{ prompt: imagePrompt }}
+          showActions={!isCreatedByUser}
         />
       );
     }

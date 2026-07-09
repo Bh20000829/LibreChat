@@ -268,7 +268,7 @@ export default function useEventHandlers({
       }
 
       // refresh title
-      if (genTitle && requestMessage.parentMessageId === Constants.NO_PARENT) {
+      if (genTitle && !isAddedRequest && requestMessage.parentMessageId === Constants.NO_PARENT) {
         setTimeout(() => {
           genTitle.mutate({ conversationId: convoUpdate.conversationId as string });
         }, 2500);
@@ -488,7 +488,9 @@ export default function useEventHandlers({
 
       const setFinalMessages = (id: string | null, _messages: TMessage[]) => {
         setMessages(_messages);
-        queryClient.setQueryData<TMessage[]>([QueryKeys.messages, id], _messages);
+        if (!isAddedRequest) {
+          queryClient.setQueryData<TMessage[]>([QueryKeys.messages, id], _messages);
+        }
       };
 
       const hasNoResponse =
@@ -546,6 +548,7 @@ export default function useEventHandlers({
       if (
         genTitle &&
         !isTemporary &&
+        !isAddedRequest &&
         requestMessage &&
         requestMessage.parentMessageId === Constants.NO_PARENT
       ) {
@@ -619,7 +622,9 @@ export default function useEventHandlers({
       const setErrorMessages = (convoId: string, errorMessage: TMessage) => {
         const finalMessages: TMessage[] = [...messages, userMessage, errorMessage];
         setMessages(finalMessages);
-        queryClient.setQueryData<TMessage[]>([QueryKeys.messages, convoId], finalMessages);
+        if (!isAddedRequest) {
+          queryClient.setQueryData<TMessage[]>([QueryKeys.messages, convoId], finalMessages);
+        }
       };
 
       const parseErrorResponse = (data: TResData | Partial<TMessage>): TMessage => {
@@ -703,6 +708,7 @@ export default function useEventHandlers({
       setMessages,
       paramId,
       newConversation,
+      isAddedRequest,
       setIsSubmitting,
       getMessages,
       queryClient,

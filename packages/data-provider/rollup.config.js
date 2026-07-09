@@ -1,22 +1,47 @@
-import typescript from 'rollup-plugin-typescript2';
+import ts from 'typescript';
+import typescriptPlugin from 'rollup-plugin-typescript2';
 import resolve from '@rollup/plugin-node-resolve';
 import pkg from './package.json';
 import peerDepsExternal from 'rollup-plugin-peer-deps-external';
 import commonjs from '@rollup/plugin-commonjs';
 import replace from '@rollup/plugin-replace';
 import terser from '@rollup/plugin-terser';
+import { transformSync } from '@babel/core';
+
+const transpileTypeScript = () => ({
+  name: 'transpile-typescript',
+  transform(code, id) {
+    if (!/\.[cm]?tsx?$/.test(id) || id.includes('node_modules')) {
+      return null;
+    }
+
+    const result = transformSync(code, {
+      filename: id,
+      babelrc: false,
+      configFile: false,
+      sourceMaps: true,
+      presets: ['@babel/preset-typescript'],
+    });
+
+    return result ? { code: result.code ?? '', map: result.map } : null;
+  },
+});
 
 const plugins = [
   peerDepsExternal(),
-  resolve(),
+  typescriptPlugin({
+    typescript: ts,
+    tsconfig: './tsconfig.json',
+    useTsconfigDeclarationDir: true,
+  }),
+  resolve({
+    extensions: ['.mjs', '.js', '.json', '.node', '.ts', '.tsx'],
+  }),
   replace({
     __IS_DEV__: process.env.NODE_ENV === 'development',
   }),
   commonjs(),
-  typescript({
-    tsconfig: './tsconfig.json',
-    useTsconfigDeclarationDir: true,
-  }),
+  transpileTypeScript(),
   terser(),
 ];
 

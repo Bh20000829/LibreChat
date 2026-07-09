@@ -52,13 +52,27 @@ function AttachFileChat({
     () => supportsFiles[endpointType ?? endpoint ?? ''] ?? false,
     [endpointType, endpoint],
   );
+  const supportsMultiImageEdit = useMemo(
+    () =>
+      conversation?.mode === 'image' &&
+      [EModelEndpoint.openAI, EModelEndpoint.google, EModelEndpoint.doubao].includes(
+        (endpointType ?? endpoint) as EModelEndpoint,
+      ),
+    [conversation?.mode, endpointType, endpoint],
+  );
   const isUploadDisabled = useMemo(
     () => (disableInputs || endpointFileConfig?.disabled) ?? false,
     [disableInputs, endpointFileConfig?.disabled],
   );
 
   if (conversation?.mode === 'image' && endpointSupportsFiles && !isUploadDisabled) {
-    return <AttachFile disabled={disableInputs} isImageMode />;
+    return (
+      <AttachFile
+        disabled={disableInputs}
+        isImageMode
+        allowMultipleImages={supportsMultiImageEdit}
+      />
+    );
   }
 
   if (isAssistants && endpointSupportsFiles && !isUploadDisabled) {
