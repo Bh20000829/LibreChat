@@ -17,6 +17,7 @@ export default function FileRow({
   assistant_id,
   agent_id,
   tool_resource,
+  fileDraftId,
   fileFilter,
   isRTL = false,
   Wrapper,
@@ -29,6 +30,7 @@ export default function FileRow({
   assistant_id?: string;
   agent_id?: string;
   tool_resource?: EToolResources;
+  fileDraftId?: string | null;
   isRTL?: boolean;
   Wrapper?: React.FC<{ children: React.ReactNode }>;
 }) {
@@ -55,7 +57,13 @@ export default function FileRow({
     },
   });
 
-  const { deleteFile } = useFileDeletion({ mutateAsync, agent_id, assistant_id, tool_resource });
+  const { deleteFile } = useFileDeletion({
+    mutateAsync,
+    agent_id,
+    assistant_id,
+    tool_resource,
+    fileDraftId,
+  });
 
   useEffect(() => {
     if (files.length === 0) {

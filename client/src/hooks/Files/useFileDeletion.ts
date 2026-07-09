@@ -1,5 +1,10 @@
 import debounce from 'lodash/debounce';
-import { FileSources, EToolResources, removeNullishValues } from 'librechat-data-provider';
+import {
+  FileSources,
+  EToolResources,
+  LocalStorageKeys,
+  removeNullishValues,
+} from 'librechat-data-provider';
 import { useCallback, useState, useEffect } from 'react';
 import type * as t from 'librechat-data-provider';
 import type { UseMutateAsyncFunction } from '@tanstack/react-query';
@@ -8,16 +13,40 @@ import useSetFilesToDelete from './useSetFilesToDelete';
 
 type FileMapSetter = GenericSetter<Map<string, ExtendedFile>>;
 
+const syncFileDraft = ({
+  fileDraftId,
+  files,
+}: {
+  fileDraftId?: string | null;
+  files: Map<string, ExtendedFile>;
+}) => {
+  if (!fileDraftId) {
+    return;
+  }
+
+  const fileIds = Array.from(files.keys());
+  const storageKey = `${LocalStorageKeys.FILES_DRAFT}${fileDraftId}`;
+
+  if (fileIds.length === 0) {
+    localStorage.removeItem(storageKey);
+    return;
+  }
+
+  localStorage.setItem(storageKey, JSON.stringify(fileIds));
+};
+
 const useFileDeletion = ({
   mutateAsync,
   agent_id,
   assistant_id,
   tool_resource,
+  fileDraftId,
 }: {
   mutateAsync: UseMutateAsyncFunction<t.DeleteFilesResponse, unknown, t.DeleteFilesBody, unknown>;
   agent_id?: string;
   assistant_id?: string;
   tool_resource?: EToolResources;
+  fileDraftId?: string | null;
 }) => {
   const [_batch, setFileDeleteBatch] = useState<t.BatchFile[]>([]);
   const setFilesToDelete = useSetFilesToDelete();
@@ -74,6 +103,7 @@ const useFileDeletion = ({
           updatedFiles.delete(temp_file_id);
           const files = Object.fromEntries(updatedFiles);
           setFilesToDelete(files);
+          syncFileDraft({ fileDraftId, files: updatedFiles });
           return updatedFiles;
         });
       }
@@ -104,7 +134,7 @@ const useFileDeletion = ({
         return newBatch;
       });
     },
-    [debouncedDelete, setFilesToDelete, agent_id, assistant_id, tool_resource],
+    [debouncedDelete, setFilesToDelete, agent_id, assistant_id, tool_resource, fileDraftId],
   );
 
   const deleteFiles = useCallback(
@@ -139,6 +169,7 @@ const useFileDeletion = ({
           });
           const filesToUpdate = Object.fromEntries(updatedFiles);
           setFilesToDelete(filesToUpdate);
+          syncFileDraft({ fileDraftId, files: updatedFiles });
           return updatedFiles;
         });
       }
@@ -153,7 +184,7 @@ const useFileDeletion = ({
         return newBatch;
       });
     },
-    [debouncedDelete, setFilesToDelete, agent_id, assistant_id],
+    [debouncedDelete, setFilesToDelete, agent_id, assistant_id, fileDraftId],
   );
 
   return { deleteFile, deleteFiles };

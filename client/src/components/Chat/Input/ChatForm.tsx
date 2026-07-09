@@ -362,7 +362,7 @@ const ChatForm = memo(({ index = 0 }: { index?: number }) => {
               handleSaveBadges={handleSaveBadges}
               setBadges={setBadges}
             />
-            <FileFormChat conversation={conversation} />
+            <FileFormChat conversation={conversation} mode={mode} />
             {endpoint && (
               <div className={cn('flex', isRTL ? 'flex-row-reverse' : 'flex-row')}>
                 <TextareaAutosize

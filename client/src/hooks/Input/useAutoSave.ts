@@ -85,7 +85,6 @@ export const useAutoSave = ({
           recoveredFiles.set(fileIdToRecover, {
             ...fileToRecover,
             progress: 1,
-            attached: true,
             size: fileToRecover.bytes,
           });
         }
@@ -258,6 +257,16 @@ export const useAutoSave = ({
       return;
     }
 
+    const previousFileDraftState = prevFileDraftStateRef.current;
+    const removedFilesInCurrentConversation =
+      previousFileDraftState.conversationId === conversationId &&
+      previousFileDraftState.fileIds.length > 0 &&
+      fileIds.length === 0;
+
+    if (removedFilesInCurrentConversation) {
+      return;
+    }
+
     if (getFileDraftIds(conversationId).length > 0) {
       restoreFiles(conversationId);
     }
@@ -265,6 +274,7 @@ export const useAutoSave = ({
     conversationId,
     currentConversationId,
     fileList,
+    fileIds.length,
     files.size,
     getFileDraftIds,
     restoreFiles,
