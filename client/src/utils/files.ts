@@ -12,6 +12,8 @@ import {
   excelMimeTypes,
   EToolResources,
   codeTypeMapping,
+  isAgentsEndpoint,
+  isDocumentSupportedProvider,
   fileConfig as defaultFileConfig,
 } from 'librechat-data-provider';
 import type { TFile, EndpointFileConfig, FileConfig } from 'librechat-data-provider';
@@ -19,6 +21,52 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { ExtendedFile } from '~/common';
 
 export const partialTypes = ['text/x-'];
+
+export type ProviderUploadFileType = 'image' | 'multimodal' | 'google_multimodal';
+
+export const getProviderUploadFileType = ({
+  endpoint,
+  provider,
+  endpointType,
+}: {
+  endpoint?: string | null;
+  provider?: string | null;
+  endpointType?: string | null;
+}): ProviderUploadFileType => {
+  const currentProvider = provider || endpoint;
+  const isAgentEndpoint = isAgentsEndpoint(endpoint) || isAgentsEndpoint(endpointType);
+  const supportsNativeDocuments =
+    isDocumentSupportedProvider(endpointType) || isDocumentSupportedProvider(currentProvider);
+
+  if (!isAgentEndpoint || !supportsNativeDocuments) {
+    return 'image';
+  }
+
+  return currentProvider === 'google' ? 'google_multimodal' : 'multimodal';
+};
+
+export const isProviderUploadSupportedFile = (
+  file: File,
+  uploadType: ProviderUploadFileType,
+): boolean => {
+  if (file.type?.startsWith('image/')) {
+    return true;
+  }
+
+  if (uploadType === 'google_multimodal') {
+    return (
+      file.type === 'application/pdf' ||
+      file.type?.startsWith('video/') ||
+      file.type?.startsWith('audio/')
+    );
+  }
+
+  if (uploadType === 'multimodal') {
+    return file.type === 'application/pdf';
+  }
+
+  return false;
+};
 
 const textDocument = {
   paths: TextPaths,
@@ -281,10 +329,11 @@ export const validateFiles = ({
 
     let mimeTypesToCheck = supportedMimeTypes;
     if (toolResource === EToolResources.context) {
+      const effectiveFileConfig = fileConfig ?? defaultFileConfig;
       mimeTypesToCheck = [
-        ...(fileConfig?.text?.supportedMimeTypes || []),
-        ...(fileConfig?.ocr?.supportedMimeTypes || []),
-        ...(fileConfig?.stt?.supportedMimeTypes || []),
+        ...(effectiveFileConfig.text?.supportedMimeTypes || []),
+        ...(effectiveFileConfig.ocr?.supportedMimeTypes || []),
+        ...(effectiveFileConfig.stt?.supportedMimeTypes || []),
       ];
     }
 

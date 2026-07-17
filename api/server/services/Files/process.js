@@ -14,6 +14,7 @@ const {
   AgentCapabilities,
   checkOpenAIStorage,
   removeNullishValues,
+  isAgentsEndpoint,
   isAssistantsEndpoint,
   getEndpointFileConfig,
 } = require('librechat-data-provider');
@@ -508,9 +509,17 @@ const processFileUpload = async ({ req, res, metadata }) => {
 const processAgentFileUpload = async ({ req, res, metadata }) => {
   const { file } = req;
   const appConfig = req.config;
-  const { agent_id, tool_resource, file_id, temp_file_id = null } = metadata;
+  const { agent_id, file_id, temp_file_id = null } = metadata;
+  let { tool_resource } = metadata;
 
   let messageAttachment = !!metadata.message_file;
+  const isImage = file.mimetype.startsWith('image');
+  if (messageAttachment && !tool_resource && !isImage && !isAgentsEndpoint(metadata.endpoint)) {
+    logger.debug(
+      `[processAgentFileUpload] Falling back to context parsing for provider upload file "${file.originalname}"`,
+    );
+    tool_resource = EToolResources.context;
+  }
 
   if (agent_id && !tool_resource && !messageAttachment) {
     throw new Error('No tool resource provided for agent file upload');
@@ -524,7 +533,6 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
     throw new Error('No agent ID provided for agent file upload');
   }
 
-  const isImage = file.mimetype.startsWith('image');
   let fileInfoMetadata;
   const entity_id = messageAttachment === true ? undefined : agent_id;
   const basePath = mime.getType(file.originalname)?.startsWith('image') ? 'images' : 'uploads';

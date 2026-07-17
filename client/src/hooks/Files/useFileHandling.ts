@@ -9,6 +9,7 @@ import {
   EModelEndpoint,
   EToolResources,
   mergeFileConfig,
+  isAgentsEndpoint,
   isAssistantsEndpoint,
   getEndpointFileConfig,
   defaultAssistantsVersion,
@@ -278,8 +279,22 @@ const useFileHandling = (params?: UseFileHandling) => {
   const handleFiles = async (_files: FileList | File[], _toolResource?: string) => {
     abortControllerRef.current = new AbortController();
     const fileList = Array.from(_files);
+    let effectiveToolResource = _toolResource;
+    const endpointKey = endpointType ?? endpoint;
+    const shouldFallbackToContext =
+      !effectiveToolResource &&
+      !isAssistantsEndpoint(endpointKey) &&
+      !isAgentsEndpoint(endpointKey) &&
+      fileList.some((file) => !file.type?.startsWith('image/'));
 
-    if (conversation?.mode === 'image' && (_toolResource == null || _toolResource === '')) {
+    if (shouldFallbackToContext) {
+      effectiveToolResource = EToolResources.context;
+    }
+
+    if (
+      conversation?.mode === 'image' &&
+      (effectiveToolResource == null || effectiveToolResource === '')
+    ) {
       const imageUploadLimit = getImageModeUploadLimit({ endpoint, endpointType });
       const existingImageCount = Array.from(files.values()).filter((file) =>
         file.type?.startsWith('image/'),
@@ -308,7 +323,7 @@ const useFileHandling = (params?: UseFileHandling) => {
         setError,
         fileConfig,
         endpointFileConfig,
-        toolResource: _toolResource,
+        toolResource: effectiveToolResource,
       });
     } catch (error) {
       console.error('file validation error', error);
@@ -337,8 +352,8 @@ const useFileHandling = (params?: UseFileHandling) => {
           size: originalFile.size,
         };
 
-        if (_toolResource != null && _toolResource !== '') {
-          initialExtendedFile.tool_resource = _toolResource;
+        if (effectiveToolResource != null && effectiveToolResource !== '') {
+          initialExtendedFile.tool_resource = effectiveToolResource;
         }
 
         // Add file immediately to show in UI

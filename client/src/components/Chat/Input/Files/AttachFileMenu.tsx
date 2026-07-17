@@ -8,12 +8,7 @@ import {
   FileImageIcon,
   TerminalSquareIcon,
 } from 'lucide-react';
-import {
-  EToolResources,
-  EModelEndpoint,
-  defaultAgentCapabilities,
-  isDocumentSupportedProvider,
-} from 'librechat-data-provider';
+import { EToolResources, defaultAgentCapabilities } from 'librechat-data-provider';
 import {
   FileUpload,
   TooltipAnchor,
@@ -34,7 +29,7 @@ import { SharePointPickerDialog } from '~/components/SharePoint';
 import { useGetStartupConfig } from '~/data-provider';
 import { ephemeralAgentByConvoId } from '~/store';
 import { MenuItemProps } from '~/common';
-import { cn } from '~/utils';
+import { cn, getProviderUploadFileType } from '~/utils';
 
 interface AttachFileMenuProps {
   agentId?: string | null;
@@ -113,24 +108,24 @@ const AttachFileMenu = ({
     ) => {
       const items: MenuItemProps[] = [];
 
-      const currentProvider = provider || endpoint;
-      if (
-        isDocumentSupportedProvider(endpointType) ||
-        isDocumentSupportedProvider(currentProvider)
-      ) {
+      const providerUploadType = getProviderUploadFileType({
+        endpoint,
+        provider,
+        endpointType,
+      });
+
+      if (providerUploadType !== 'image') {
         items.push({
           label: localize('com_ui_upload_provider'),
           onClick: () => {
             setToolResource(undefined);
-            onAction(
-              (provider || endpoint) === EModelEndpoint.google ? 'google_multimodal' : 'multimodal',
-            );
+            onAction(providerUploadType);
           },
           icon: <FileImageIcon className="icon-md" />,
         });
       } else {
         items.push({
-          label: localize('com_ui_upload_image_input'),
+          label: localize('com_ui_upload_provider'),
           onClick: () => {
             setToolResource(undefined);
             onAction('image');

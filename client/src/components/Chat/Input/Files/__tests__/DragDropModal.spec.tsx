@@ -1,121 +1,59 @@
-import { EModelEndpoint, isDocumentSupportedProvider } from 'librechat-data-provider';
+import { EModelEndpoint } from 'librechat-data-provider';
+import { getProviderUploadFileType, isProviderUploadSupportedFile } from '~/utils';
 
-describe('DragDropModal - Provider Detection', () => {
-  describe('endpointType priority over currentProvider', () => {
-    it('should show upload option for LiteLLM with OpenAI endpointType', () => {
-      const currentProvider = 'litellm'; // NOT in documentSupportedProviders
-      const endpointType = EModelEndpoint.openAI; // IS in documentSupportedProviders
-
-      // With fix: endpointType checked
-      const withFix =
-        isDocumentSupportedProvider(endpointType) || isDocumentSupportedProvider(currentProvider);
-      expect(withFix).toBe(true);
-
-      // Without fix: only currentProvider checked = false
-      const withoutFix = isDocumentSupportedProvider(currentProvider || endpointType);
-      expect(withoutFix).toBe(false);
-    });
-
-    it('should show upload option for any custom gateway with OpenAI endpointType', () => {
-      const currentProvider = 'my-custom-gateway';
-      const endpointType = EModelEndpoint.openAI;
-
-      const result =
-        isDocumentSupportedProvider(endpointType) || isDocumentSupportedProvider(currentProvider);
-      expect(result).toBe(true);
-    });
-
-    it('should fallback to currentProvider when endpointType is undefined', () => {
-      const currentProvider = EModelEndpoint.openAI;
-      const endpointType = undefined;
-
-      const result =
-        isDocumentSupportedProvider(endpointType) || isDocumentSupportedProvider(currentProvider);
-      expect(result).toBe(true);
-    });
-
-    it('should fallback to currentProvider when endpointType is null', () => {
-      const currentProvider = EModelEndpoint.anthropic;
-      const endpointType = null;
-
-      const result =
-        isDocumentSupportedProvider(endpointType as any) ||
-        isDocumentSupportedProvider(currentProvider);
-      expect(result).toBe(true);
-    });
-
-    it('should return false when neither provider supports documents', () => {
-      const currentProvider = 'unsupported-provider';
-      const endpointType = 'unsupported-endpoint' as any;
-
-      const result =
-        isDocumentSupportedProvider(endpointType) || isDocumentSupportedProvider(currentProvider);
-      expect(result).toBe(false);
-    });
+describe('DragDropModal - provider upload capability detection', () => {
+  it('uses image-only provider upload for ordinary OpenAI chats', () => {
+    expect(
+      getProviderUploadFileType({
+        endpoint: EModelEndpoint.openAI,
+        endpointType: EModelEndpoint.openAI,
+      }),
+    ).toBe('image');
   });
 
-  describe('supported providers', () => {
-    const supportedProviders = [
-      { name: 'OpenAI', value: EModelEndpoint.openAI },
-      { name: 'Anthropic', value: EModelEndpoint.anthropic },
-      { name: 'Google', value: EModelEndpoint.google },
-      { name: 'Azure OpenAI', value: EModelEndpoint.azureOpenAI },
-      { name: 'Custom', value: EModelEndpoint.custom },
-    ];
-
-    supportedProviders.forEach(({ name, value }) => {
-      it(`should recognize ${name} as supported`, () => {
-        expect(isDocumentSupportedProvider(value)).toBe(true);
-      });
-    });
-  });
-
-  describe('real-world scenarios', () => {
-    it('should handle LiteLLM gateway pointing to OpenAI', () => {
-      const scenario = {
-        currentProvider: 'litellm',
-        endpointType: EModelEndpoint.openAI,
-      };
-
-      expect(
-        isDocumentSupportedProvider(scenario.endpointType) ||
-          isDocumentSupportedProvider(scenario.currentProvider),
-      ).toBe(true);
-    });
-
-    it('should handle direct OpenAI connection', () => {
-      const scenario = {
-        currentProvider: EModelEndpoint.openAI,
-        endpointType: EModelEndpoint.openAI,
-      };
-
-      expect(
-        isDocumentSupportedProvider(scenario.endpointType) ||
-          isDocumentSupportedProvider(scenario.currentProvider),
-      ).toBe(true);
-    });
-
-    it('should handle unsupported custom endpoint without override', () => {
-      const scenario = {
-        currentProvider: 'my-unsupported-endpoint',
-        endpointType: undefined,
-      };
-
-      expect(
-        isDocumentSupportedProvider(scenario.endpointType) ||
-          isDocumentSupportedProvider(scenario.currentProvider),
-      ).toBe(false);
-    });
-    it('should handle agents endpoints with document supported providers', () => {
-      const scenario = {
-        currentProvider: EModelEndpoint.google,
+  it('uses document-capable provider upload for OpenAI agents', () => {
+    expect(
+      getProviderUploadFileType({
+        endpoint: EModelEndpoint.agents,
         endpointType: EModelEndpoint.agents,
-      };
+        provider: EModelEndpoint.openAI,
+      }),
+    ).toBe('multimodal');
+  });
 
-      expect(
-        isDocumentSupportedProvider(scenario.endpointType) ||
-          isDocumentSupportedProvider(scenario.currentProvider),
-      ).toBe(true);
-    });
+  it('uses Google multimodal upload for Google agents', () => {
+    expect(
+      getProviderUploadFileType({
+        endpoint: EModelEndpoint.agents,
+        endpointType: EModelEndpoint.agents,
+        provider: EModelEndpoint.google,
+      }),
+    ).toBe('google_multimodal');
+  });
+
+  it('falls back to image-only provider upload for unsupported providers', () => {
+    expect(
+      getProviderUploadFileType({
+        endpoint: 'unsupported-provider',
+        endpointType: 'unsupported-endpoint',
+      }),
+    ).toBe('image');
+  });
+
+  it('allows PDFs only for document-capable provider upload', () => {
+    const pdf = new File(['pdf'], 'test.pdf', { type: 'application/pdf' });
+
+    expect(isProviderUploadSupportedFile(pdf, 'image')).toBe(false);
+    expect(isProviderUploadSupportedFile(pdf, 'multimodal')).toBe(true);
+  });
+
+  it('allows audio and video only for Google multimodal provider upload', () => {
+    const audio = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' });
+    const video = new File(['video'], 'test.mp4', { type: 'video/mp4' });
+
+    expect(isProviderUploadSupportedFile(audio, 'multimodal')).toBe(false);
+    expect(isProviderUploadSupportedFile(video, 'multimodal')).toBe(false);
+    expect(isProviderUploadSupportedFile(audio, 'google_multimodal')).toBe(true);
+    expect(isProviderUploadSupportedFile(video, 'google_multimodal')).toBe(true);
   });
 });
