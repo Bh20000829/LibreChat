@@ -16,6 +16,8 @@ const { processCodeOutput } = require('~/server/services/Files/Code/process');
 const { loadAuthValues } = require('~/server/services/Tools/credentials');
 const { saveBase64Image } = require('~/server/services/Files/process');
 
+const CREATE_FILE_TOOL = 'create_file';
+
 class ModelEndHandler {
   /**
    * @param {Array<UsageMetadata>} collectedUsage
@@ -286,6 +288,31 @@ function createToolEndCallback({ req, res, artifactPromises }) {
 
     if (!output.artifact) {
       return;
+    }
+
+    if (output.artifact[CREATE_FILE_TOOL]) {
+      artifactPromises.push(
+        (async () => {
+          const file = output.artifact[CREATE_FILE_TOOL].file;
+          if (!file) {
+            return null;
+          }
+          const fileMetadata = Object.assign(file, {
+            type: file.type,
+            messageId: metadata.run_id,
+            toolCallId: output.tool_call_id,
+            conversationId: metadata.thread_id,
+          });
+          if (!res.headersSent) {
+            return fileMetadata;
+          }
+          res.write(`event: attachment\ndata: ${JSON.stringify(fileMetadata)}\n\n`);
+          return fileMetadata;
+        })().catch((error) => {
+          logger.error('Error processing generated file artifact:', error);
+          return null;
+        }),
+      );
     }
 
     if (output.artifact[Tools.file_search]) {

@@ -1,13 +1,10 @@
 import React, { memo, useMemo, useRef, useEffect } from 'react';
-import { useRecoilValue } from 'recoil';
-import { useToastContext } from '@librechat/client';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { PermissionTypes, Permissions, dataService } from 'librechat-data-provider';
 import CodeBlock from '~/components/Messages/Content/CodeBlock';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
-import { useFileDownload } from '~/data-provider';
 import { useCodeBlockContext } from '~/Providers';
 import { handleDoubleClick } from '~/utils';
-import { useLocalize } from '~/hooks';
 import store from '~/store';
 
 type TCodeProps = {
@@ -77,13 +74,13 @@ type TAnchorProps = {
 
 export const a: React.ElementType = memo(({ href, children }: TAnchorProps) => {
   const user = useRecoilValue(store.user);
-  const { showToast } = useToastContext();
-  const localize = useLocalize();
+  const setFilePreview = useSetRecoilState(store.filePreview);
 
   const {
     file_id = '',
     filename = '',
     filepath,
+    source,
   } = useMemo(() => {
     const pattern = new RegExp(`(?:files|outputs)/${user?.id}/([^\\s]+)`);
     const match = href.match(pattern);
@@ -92,12 +89,11 @@ export const a: React.ElementType = memo(({ href, children }: TAnchorProps) => {
       const parts = path.split('/');
       const name = parts.pop();
       const file_id = parts.pop();
-      return { file_id, filename: name, filepath: path };
+      return { file_id, filename: name, filepath: path, source: parts[0] };
     }
-    return { file_id: '', filename: '', filepath: '' };
+    return { file_id: '', filename: '', filepath: '', source: '' };
   }, [user?.id, href]);
 
-  const { refetch: downloadFile } = useFileDownload(user?.id ?? '', file_id);
   const props: { target?: string; onClick?: React.MouseEventHandler } = { target: '_new' };
 
   if (!file_id || !filename) {
@@ -108,44 +104,25 @@ export const a: React.ElementType = memo(({ href, children }: TAnchorProps) => {
     );
   }
 
-  const handleDownload = async (event: React.MouseEvent<HTMLAnchorElement>) => {
+  const domainServerBaseUrl = dataService.getDomainServerBaseUrl();
+  const resolvedHref = filepath?.startsWith('files/')
+    ? `${domainServerBaseUrl}/${filepath}`
+    : `${domainServerBaseUrl}/files/${filepath}`;
+
+  const handlePreview = (event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
-    try {
-      const stream = await downloadFile();
-      if (stream.data == null || stream.data === '') {
-        console.error('Error downloading file: No data found');
-        showToast({
-          status: 'error',
-          message: localize('com_ui_download_error'),
-        });
-        return;
-      }
-      const link = document.createElement('a');
-      link.href = stream.data;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(stream.data);
-    } catch (error) {
-      console.error('Error downloading file:', error);
-    }
+    setFilePreview(
+      source === 'files'
+        ? { file_id, filepath, filename, user: user?.id }
+        : { filepath: resolvedHref, filename, user: user?.id },
+    );
   };
 
-  props.onClick = handleDownload;
+  props.onClick = handlePreview;
   props.target = '_blank';
 
-  const domainServerBaseUrl = dataService.getDomainServerBaseUrl();
-
   return (
-    <a
-      href={
-        filepath?.startsWith('files/')
-          ? `${domainServerBaseUrl}/${filepath}`
-          : `${domainServerBaseUrl}/files/${filepath}`
-      }
-      {...props}
-    >
+    <a href={resolvedHref} {...props}>
       {children}
     </a>
   );

@@ -232,6 +232,8 @@ export const revertAgentVersion = (agent_id: string) => `${agents({ path: `${age
 export const files = () => `${BASE_URL}/api/files`;
 export const fileUpload = () => `${BASE_URL}/api/files`;
 export const fileDelete = () => `${BASE_URL}/api/files`;
+export const filePreview = (userId: string, fileId: string) =>
+  `${BASE_URL}/api/files/preview/${userId}/${fileId}`;
 export const fileDownload = (userId: string, fileId: string) =>
   `${BASE_URL}/api/files/download/${userId}/${fileId}`;
 export const fileConfig = () => `${BASE_URL}/api/files/config`;

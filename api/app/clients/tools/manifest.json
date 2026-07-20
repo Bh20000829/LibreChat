@@ -59,6 +59,12 @@
     ]
   },
   {
+    "name": "Create File",
+    "pluginKey": "create_file",
+    "description": "Create real downloadable chat attachments, including Excel workbooks, Markdown, source code, Unity text assets, CSV, JSON, HTML, and text files.",
+    "icon": "assets/file.svg"
+  },
+  {
     "name": "Wolfram",
     "pluginKey": "wolfram",
     "description": "Access computation, math, curated knowledge & real-time data through Wolfram|Alpha and Wolfram Language.",

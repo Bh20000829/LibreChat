@@ -261,6 +261,81 @@ function isValidID(str) {
   return /^[A-Za-z0-9_-]{21}$/.test(str);
 }
 
+function encodeRFC5987ValueChars(str) {
+  return encodeURIComponent(str).replace(
+    /['()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+function createContentDisposition(filename) {
+  const fallback = (filename || 'download')
+    .replace(/[^\x20-\x7e]/g, '_')
+    .replace(/["\\]/g, '_')
+    .trim();
+  const safeFallback = fallback || 'download';
+  return `attachment; filename="${safeFallback}"; filename*=UTF-8''${encodeRFC5987ValueChars(
+    filename || safeFallback,
+  )}`;
+}
+
+function setFileResponseHeaders({ res, file, download = false }) {
+  const cleanedFilename = cleanFileName(file.filename);
+  if (download) {
+    res.setHeader('Content-Disposition', createContentDisposition(cleanedFilename));
+    res.setHeader('Content-Type', 'application/octet-stream');
+  } else {
+    res.setHeader('Content-Type', file.type || 'application/octet-stream');
+  }
+  res.setHeader('X-File-Metadata', encodeURIComponent(JSON.stringify(file)));
+}
+
+async function pipeFileResponse({ req, res, file, fileId, download = false }) {
+  if (checkOpenAIStorage(file.source) && !file.model) {
+    logger.warn(`File requested by user ${req.user.id} has no associated model: ${fileId}`);
+    return res.status(400).send('The model used when creating this file is not available');
+  }
+
+  const { getDownloadStream } = getStrategyFunctions(file.source);
+  if (!getDownloadStream) {
+    logger.warn(`File requested by user ${req.user.id} has no stream method: ${file.source}`);
+    return res.status(501).send('Not Implemented');
+  }
+
+  if (checkOpenAIStorage(file.source)) {
+    req.body = { model: file.model };
+    const endpointMap = {
+      [FileSources.openai]: EModelEndpoint.assistants,
+      [FileSources.azure]: EModelEndpoint.azureAssistants,
+    };
+    const { openai } = await getOpenAIClient({
+      req,
+      res,
+      overrideEndpoint: endpointMap[file.source],
+    });
+    logger.debug(`Streaming file ${fileId} from OpenAI`);
+    const passThrough = await getDownloadStream(fileId, openai);
+    setFileResponseHeaders({ res, file, download });
+
+    // Handle both Node.js and Web streams
+    const stream =
+      passThrough.body && typeof passThrough.body.getReader === 'function'
+        ? Readable.fromWeb(passThrough.body)
+        : passThrough.body;
+
+    return stream.pipe(res);
+  }
+
+  const fileStream = await getDownloadStream(req, file.filepath);
+
+  fileStream.on('error', (streamError) => {
+    logger.error('[FILE ROUTE] Stream error:', streamError);
+  });
+
+  setFileResponseHeaders({ res, file, download });
+  return fileStream.pipe(res);
+}
+
 router.get('/code/download/:session_id/:fileId', async (req, res) => {
   try {
     const { session_id, fileId } = req.params;
@@ -299,6 +374,20 @@ router.get('/code/download/:session_id/:fileId', async (req, res) => {
   }
 });
 
+router.get('/preview/:userId/:file_id', fileAccess, async (req, res) => {
+  try {
+    const { userId, file_id } = req.params;
+    logger.debug(`File preview requested by user ${userId}: ${file_id}`);
+
+    // Access already validated by fileAccess middleware
+    const file = req.fileAccess.file;
+    return await pipeFileResponse({ req, res, file, fileId: file_id, download: false });
+  } catch (error) {
+    logger.error('[PREVIEW ROUTE] Error previewing file:', error);
+    res.status(500).send('Error previewing file');
+  }
+});
+
 router.get('/download/:userId/:file_id', fileAccess, async (req, res) => {
   try {
     const { userId, file_id } = req.params;
@@ -306,60 +395,7 @@ router.get('/download/:userId/:file_id', fileAccess, async (req, res) => {
 
     // Access already validated by fileAccess middleware
     const file = req.fileAccess.file;
-
-    if (checkOpenAIStorage(file.source) && !file.model) {
-      logger.warn(`File download requested by user ${userId} has no associated model: ${file_id}`);
-      return res.status(400).send('The model used when creating this file is not available');
-    }
-
-    const { getDownloadStream } = getStrategyFunctions(file.source);
-    if (!getDownloadStream) {
-      logger.warn(
-        `File download requested by user ${userId} has no stream method implemented: ${file.source}`,
-      );
-      return res.status(501).send('Not Implemented');
-    }
-
-    const setHeaders = () => {
-      const cleanedFilename = cleanFileName(file.filename);
-      res.setHeader('Content-Disposition', `attachment; filename="${cleanedFilename}"`);
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('X-File-Metadata', JSON.stringify(file));
-    };
-
-    if (checkOpenAIStorage(file.source)) {
-      req.body = { model: file.model };
-      const endpointMap = {
-        [FileSources.openai]: EModelEndpoint.assistants,
-        [FileSources.azure]: EModelEndpoint.azureAssistants,
-      };
-      const { openai } = await getOpenAIClient({
-        req,
-        res,
-        overrideEndpoint: endpointMap[file.source],
-      });
-      logger.debug(`Downloading file ${file_id} from OpenAI`);
-      const passThrough = await getDownloadStream(file_id, openai);
-      setHeaders();
-      logger.debug(`File ${file_id} downloaded from OpenAI`);
-
-      // Handle both Node.js and Web streams
-      const stream =
-        passThrough.body && typeof passThrough.body.getReader === 'function'
-          ? Readable.fromWeb(passThrough.body)
-          : passThrough.body;
-
-      stream.pipe(res);
-    } else {
-      const fileStream = await getDownloadStream(req, file.filepath);
-
-      fileStream.on('error', (streamError) => {
-        logger.error('[DOWNLOAD ROUTE] Stream error:', streamError);
-      });
-
-      setHeaders();
-      fileStream.pipe(res);
-    }
+    return await pipeFileResponse({ req, res, file, fileId: file_id, download: true });
   } catch (error) {
     logger.error('[DOWNLOAD ROUTE] Error downloading file:', error);
     res.status(500).send('Error downloading file');

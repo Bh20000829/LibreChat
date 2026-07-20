@@ -1,6 +1,8 @@
 import React from 'react';
+import { useSetRecoilState } from 'recoil';
 import { useToastContext } from '@librechat/client';
 import { useCodeOutputDownload } from '~/data-provider';
+import store from '~/store';
 
 interface LogLinkProps {
   href: string;
@@ -40,11 +42,17 @@ export const useAttachmentLink = ({ href, filename }: Pick<LogLinkProps, 'href' 
 };
 
 const LogLink: React.FC<LogLinkProps> = ({ href, filename, children }) => {
-  const { handleDownload } = useAttachmentLink({ href, filename });
+  const setFilePreview = useSetRecoilState(store.filePreview);
+
+  const handlePreview = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    setFilePreview({ filepath: href, filename });
+  };
+
   return (
     <a
       href={href}
-      onClick={handleDownload}
+      onClick={handlePreview}
       target="_blank"
       rel="noopener noreferrer"
       className="!text-blue-400 visited:!text-purple-400 hover:underline"

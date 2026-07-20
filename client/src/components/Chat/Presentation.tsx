@@ -5,6 +5,7 @@ import type { ExtendedFile } from '~/common';
 import { useDeleteFilesMutation } from '~/data-provider';
 import DragDropWrapper from '~/components/Chat/Input/Files/DragDropWrapper';
 import { EditorProvider, SidePanelProvider, ArtifactsProvider } from '~/Providers';
+import FilePreviewPanel from '~/components/Files/FilePreviewPanel';
 import Artifacts from '~/components/Artifacts/Artifacts';
 import { SidePanelGroup } from '~/components/SidePanel';
 import { useSetFilesToDelete } from '~/hooks';
@@ -13,6 +14,7 @@ import store from '~/store';
 export default function Presentation({ children }: { children: React.ReactNode }) {
   const artifacts = useRecoilValue(store.artifactsState);
   const artifactsVisibility = useRecoilValue(store.artifactsVisibility);
+  const filePreview = useRecoilValue(store.filePreview);
 
   const setFilesToDelete = useSetFilesToDelete();
 
@@ -61,7 +63,11 @@ export default function Presentation({ children }: { children: React.ReactNode }
    * Memoize artifacts JSX to prevent recreating it on every render
    * This is critical for performance - prevents entire artifact tree from re-rendering
    */
-  const artifactsElement = useMemo(() => {
+  const panelElement = useMemo(() => {
+    if (filePreview) {
+      return <FilePreviewPanel item={filePreview} />;
+    }
+
     if (artifactsVisibility === true && Object.keys(artifacts ?? {}).length > 0) {
       return (
         <ArtifactsProvider>
@@ -72,7 +78,7 @@ export default function Presentation({ children }: { children: React.ReactNode }
       );
     }
     return null;
-  }, [artifactsVisibility, artifacts]);
+  }, [artifactsVisibility, artifacts, filePreview]);
 
   return (
     <DragDropWrapper className="relative flex w-full grow overflow-hidden bg-presentation">
@@ -81,7 +87,7 @@ export default function Presentation({ children }: { children: React.ReactNode }
           defaultLayout={defaultLayout}
           fullPanelCollapse={fullCollapse}
           defaultCollapsed={defaultCollapsed}
-          artifacts={artifactsElement}
+          artifacts={panelElement}
         >
           <main className="flex h-full flex-col overflow-y-auto" role="main">
             {children}

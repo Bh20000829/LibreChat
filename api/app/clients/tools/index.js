@@ -11,6 +11,7 @@ const StructuredSD = require('./structured/StableDiffusion');
 const GoogleSearchAPI = require('./structured/GoogleSearch');
 const TraversaalSearch = require('./structured/TraversaalSearch');
 const createOpenAIImageTools = require('./structured/OpenAIImageTools');
+const createCreateFileTool = require('./structured/CreateFile');
 const TavilySearchResults = require('./structured/TavilySearchResults');
 
 module.exports = {
@@ -27,4 +28,5 @@ module.exports = {
   createYouTubeTools,
   TavilySearchResults,
   createOpenAIImageTools,
+  createCreateFileTool,
 };

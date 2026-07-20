@@ -572,11 +572,17 @@ export const uploadAgentAvatar = (data: m.AgentAvatarVariables): Promise<a.Agent
 };
 
 export const getFileDownload = async (userId: string, file_id: string): Promise<AxiosResponse> => {
-  return request.getResponse(`${endpoints.files()}/download/${userId}/${file_id}`, {
+  return request.getResponse(endpoints.fileDownload(userId, file_id), {
     responseType: 'blob',
     headers: {
       Accept: 'application/octet-stream',
     },
+  });
+};
+
+export const getFilePreview = async (userId: string, file_id: string): Promise<AxiosResponse> => {
+  return request.getResponse(endpoints.filePreview(userId, file_id), {
+    responseType: 'blob',
   });
 };
 

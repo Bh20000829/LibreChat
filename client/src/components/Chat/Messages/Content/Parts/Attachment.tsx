@@ -1,17 +1,15 @@
 import { memo, useState, useEffect } from 'react';
+import { useSetRecoilState } from 'recoil';
 import { imageExtRegex, Tools } from 'librechat-data-provider';
 import type { TAttachment, TFile, TAttachmentMetadata } from 'librechat-data-provider';
 import FileContainer from '~/components/Chat/Input/Files/FileContainer';
 import Image from '~/components/Chat/Messages/Content/Image';
-import { useAttachmentLink } from './LogLink';
+import store from '~/store';
 import { cn } from '~/utils';
 
 const FileAttachment = memo(({ attachment }: { attachment: Partial<TAttachment> }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const { handleDownload } = useAttachmentLink({
-    href: attachment.filepath ?? '',
-    filename: attachment.filename ?? '',
-  });
+  const setFilePreview = useSetRecoilState(store.filePreview);
   const extension = attachment.filename?.split('.').pop();
 
   useEffect(() => {
@@ -19,7 +17,7 @@ const FileAttachment = memo(({ attachment }: { attachment: Partial<TAttachment> 
     return () => clearTimeout(timer);
   }, []);
 
-  if (!attachment.filepath) {
+  if (!attachment.filepath && !attachment.file_id) {
     return null;
   }
   return (
@@ -37,7 +35,7 @@ const FileAttachment = memo(({ attachment }: { attachment: Partial<TAttachment> 
     >
       <FileContainer
         file={attachment}
-        onClick={handleDownload}
+        onClick={() => setFilePreview(attachment)}
         overrideType={extension}
         containerClassName="max-w-fit"
         buttonClassName="bg-surface-secondary hover:cursor-pointer hover:bg-surface-hover active:bg-surface-secondary focus:bg-surface-hover hover:border-border-heavy active:border-border-heavy"
@@ -104,7 +102,7 @@ export default function Attachment({ attachment }: { attachment?: TAttachment })
 
   if (isImage) {
     return <ImageAttachment attachment={attachment} />;
-  } else if (!attachment.filepath) {
+  } else if (!attachment.filepath && !attachment.file_id) {
     return null;
   }
   return <FileAttachment attachment={attachment} />;
@@ -139,7 +137,7 @@ export function AttachmentGroup({ attachments }: { attachments?: TAttachment[] }
       {fileAttachments.length > 0 && (
         <div className="my-2 flex flex-wrap items-center gap-2.5">
           {fileAttachments.map((attachment, index) =>
-            attachment.filepath ? (
+            attachment.filepath || attachment.file_id ? (
               <FileAttachment attachment={attachment} key={`file-${index}`} />
             ) : null,
           )}

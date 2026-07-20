@@ -1,9 +1,12 @@
 import { useMemo, memo } from 'react';
+import { useSetRecoilState } from 'recoil';
 import type { TFile, TMessage } from 'librechat-data-provider';
 import FileContainer from '~/components/Chat/Input/Files/FileContainer';
+import store from '~/store';
 import Image from './Image';
 
 const Files = ({ message }: { message?: TMessage }) => {
+  const setFilePreview = useSetRecoilState(store.filePreview);
   const imageFiles = useMemo(() => {
     return message?.files?.filter((file) => file.type?.startsWith('image/')) || [];
   }, [message?.files]);
@@ -15,7 +18,13 @@ const Files = ({ message }: { message?: TMessage }) => {
   return (
     <>
       {otherFiles.length > 0 &&
-        otherFiles.map((file) => <FileContainer key={file.file_id} file={file as TFile} />)}
+        otherFiles.map((file) => (
+          <FileContainer
+            key={file.file_id}
+            file={file as TFile}
+            onClick={() => setFilePreview(file as TFile)}
+          />
+        ))}
       {imageFiles.length > 0 && (
         <div className="flex w-full max-w-full flex-row flex-wrap items-start gap-2.5">
           {imageFiles.map((file) => (

@@ -68,6 +68,54 @@ const getImageEditPromptDescription = () => {
 };
 
 export const oaiToolkit = {
+  create_file: {
+    name: 'create_file' as const,
+    description:
+      'Create a real downloadable file and attach it to the chat. Use this tool whenever the user asks to generate, create, export, save, attach, or provide a downloadable file. Do not satisfy those requests by only returning code blocks, XML, CSV text, or instructions. For .xlsx files, pass structured workbook data in sheets. For text, Markdown, source code, config files, and Unity text assets, pass the complete file body in content. Examples include .xlsx, .csv, .txt, .json, .xml, .md, .html, .java, .js, .ts, .py, .cs, .unity, .prefab, .meta, and other safe downloadable files. Do not create executable or script-launcher files such as .exe, .dll, .msi, .bat, .cmd, .ps1, .vbs, .jar, .lnk, or .reg.',
+    schema: z.object({
+      filename: z
+        .string()
+        .min(1)
+        .max(180)
+        .describe(
+          'The final filename, including extension. Preserve the extension the user requested, for example "test.xlsx", "README.md", "DateUtils.java", or "PlayerController.cs".',
+        ),
+      mime_type: z
+        .string()
+        .optional()
+        .describe(
+          'The MIME type when known. Use application/vnd.openxmlformats-officedocument.spreadsheetml.sheet for xlsx, text/markdown for md, text/x-java-source for java, text/plain for plain source/config files.',
+        ),
+      content: z
+        .string()
+        .max(3000000)
+        .optional()
+        .describe(
+          'The complete UTF-8 text content for text files, source code, Markdown, JSON, XML, HTML, CSV, Unity text assets, and config files. Use this for files such as .md, .java, .js, .ts, .py, .cs, .unity, .prefab, .meta, .json, .csv, .html, and .txt.',
+        ),
+      base64: z
+        .string()
+        .optional()
+        .describe(
+          'Base64 encoded binary file content. Use only when the requested file is genuinely binary and you already have valid bytes. Do not use this for xlsx; use sheets instead. Do not use this for source code, Unity text assets, or Markdown; use content instead. Executable and script-launcher files such as .exe, .dll, .msi, .bat, .cmd, .ps1, .vbs, .jar, .lnk, and .reg are not allowed.',
+        ),
+      sheets: z
+        .array(
+          z.object({
+            name: z.string().min(1).max(31).describe('Worksheet name.'),
+            rows: z
+              .array(z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])))
+              .min(1)
+              .describe('Rows for spreadsheet generation. The first row starts at A1.'),
+          }),
+        )
+        .optional()
+        .describe(
+          'Structured spreadsheet data. Use this when creating xlsx files. Do not return Python, XML, CSV, or instructions for Excel; pass the workbook data here so a real .xlsx attachment is created.',
+        ),
+    }),
+    responseFormat: 'content_and_artifact' as const,
+  },
   image_gen_oai: {
     name: 'image_gen_oai' as const,
     description: getImageGenDescription(),

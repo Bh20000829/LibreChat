@@ -1,0 +1,47 @@
+version: 1.2.1
+
+cache: true
+
+interface:
+  # customWelcome: 'Welcome! Enjoy your experience.'
+  fileSearch: true
+  endpointsMenu: true
+  modelSelect: true
+  parameters: true
+  sidePanel: true
+  presets: true
+  prompts: true
+  bookmarks: true
+  multiConvo: true
+  agents: false
+  peoplePicker:
+    users: true
+    groups: true
+    roles: true
+  marketplace:
+    use: false
+  fileCitations: true
+
+registration:
+  socialLogins: ['github', 'google', 'discord', 'openid', 'facebook', 'apple', 'saml']
+
+actions:
+  allowedDomains:
+    - 'swapi.dev'
+    - 'librechat.ai'
+    - 'google.com'
+
+endpoints:
+  doubao:
+    imageWatermark: false
+
+  custom:
+    - name: 'deepseek'
+      apiKey: '${DEEPSEEK_API_KEY}'
+      baseURL: 'https://api.openai-proxy.org/v1'
+      models:
+        default: ['deepseek-v3.2', 'deepseek-v4-pro']
+        fetch: false
+      titleConvo: true
+      titleModel: 'deepseek-v3.2'
+      modelDisplayLabel: 'DeepSeek'

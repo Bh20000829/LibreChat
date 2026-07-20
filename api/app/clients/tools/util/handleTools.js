@@ -16,6 +16,7 @@ const {
   Constants,
   Permissions,
   EToolResources,
+  EModelEndpoint,
   PermissionTypes,
   replaceSpecialVars,
 } = require('librechat-data-provider');
@@ -35,6 +36,7 @@ const {
   createYouTubeTools,
   TavilySearchResults,
   createOpenAIImageTools,
+  createCreateFileTool,
 } = require('../');
 const { primeFiles: primeCodeFiles } = require('~/server/services/Files/Code/process');
 const { createFileSearchTool, primeFiles: primeSearchFiles } = require('./fileSearch');
@@ -43,6 +45,18 @@ const { createMCPTool, createMCPTools } = require('~/server/services/MCP');
 const { loadAuthValues } = require('~/server/services/Tools/credentials');
 const { getMCPServerTools } = require('~/server/services/Config');
 const { getRoleByName } = require('~/models/Role');
+
+const CREATE_FILE_SUPPORTED_PROVIDERS = new Set([
+  EModelEndpoint.openAI,
+  EModelEndpoint.azureOpenAI,
+  EModelEndpoint.google,
+  EModelEndpoint.anthropic,
+]);
+
+const CREATE_FILE_COMPATIBLE_SCHEMA_PROVIDERS = new Set([
+  EModelEndpoint.google,
+  EModelEndpoint.anthropic,
+]);
 
 /**
  * Validates the availability and authentication of tools for a user based on environment variables or user-specific plugin authentication values.
@@ -216,6 +230,18 @@ const loadTools = async ({
         imageOutputType,
         fileStrategy,
         imageFiles,
+      });
+    },
+    create_file: async () => {
+      const provider = agent?.provider ?? endpoint;
+      if (!CREATE_FILE_SUPPORTED_PROVIDERS.has(provider)) {
+        logger.warn(`Tool "create_file" is not enabled for provider: ${provider}`);
+        return null;
+      }
+      return createCreateFileTool({
+        isAgent: !!agent,
+        req: options.req,
+        schemaVariant: CREATE_FILE_COMPATIBLE_SCHEMA_PROVIDERS.has(provider) ? provider : 'default',
       });
     },
   };

@@ -11,6 +11,7 @@ import MemoryArtifacts from './MemoryArtifacts';
 import Sources from '~/components/Web/Sources';
 import { mapAttachments } from '~/utils/map';
 import { EditTextPart } from './Parts';
+import { AttachmentGroup } from './Parts/Attachment';
 import Part from './Part';
 import type { ImageDisplaySize } from './Image';
 
@@ -92,6 +93,27 @@ const ContentParts = memo(
   }: ContentPartsProps) => {
     const { getMessages } = useMessagesOperations();
     const attachmentMap = useMemo(() => mapAttachments(attachments ?? []), [attachments]);
+    const contentToolCallIds = useMemo(() => {
+      const ids = new Set<string>();
+
+      content?.forEach((part) => {
+        const toolCallId =
+          (part?.[ContentTypes.TOOL_CALL] as Agents.ToolCall | undefined)?.id ?? '';
+        if (toolCallId) {
+          ids.add(toolCallId);
+        }
+      });
+
+      return ids;
+    }, [content]);
+    const looseAttachments = useMemo(
+      () =>
+        (attachments ?? []).filter((attachment) => {
+          const toolCallId = attachment.toolCallId ?? '';
+          return !toolCallId || !contentToolCallIds.has(toolCallId);
+        }),
+      [attachments, contentToolCallIds],
+    );
     const imagePrompt = useMemo(() => {
       const extractText = (parts: Array<TMessageContentParts | undefined> | undefined) => {
         const prompt = (parts ?? [])
@@ -135,7 +157,7 @@ const ContentParts = memo(
     const effectiveIsSubmitting = isLatestMessage ? isSubmitting : false;
 
     if (!content) {
-      return null;
+      return <AttachmentGroup attachments={looseAttachments} />;
     }
     if (edit === true && enterEdit && setSiblingIdx) {
       return (
@@ -271,6 +293,7 @@ const ContentParts = memo(
               </MessageContext.Provider>
             );
           })}
+          <AttachmentGroup attachments={looseAttachments} />
         </SearchContext.Provider>
       </>
     );

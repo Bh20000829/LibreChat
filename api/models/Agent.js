@@ -1,7 +1,13 @@
 const mongoose = require('mongoose');
 const crypto = require('node:crypto');
 const { logger } = require('@librechat/data-schemas');
-const { ResourceType, SystemRoles, Tools, actionDelimiter } = require('librechat-data-provider');
+const {
+  ResourceType,
+  SystemRoles,
+  Tools,
+  EModelEndpoint,
+  actionDelimiter,
+} = require('librechat-data-provider');
 const { GLOBAL_PROJECT_NAME, EPHEMERAL_AGENT_ID, mcp_all, mcp_delimiter } =
   require('librechat-data-provider').Constants;
 const {
@@ -14,6 +20,14 @@ const { removeAllPermissions } = require('~/server/services/PermissionService');
 const { getMCPServerTools } = require('~/server/services/Config');
 const { getActions } = require('./Action');
 const { Agent } = require('~/db/models');
+
+const CREATE_FILE_TOOL = 'create_file';
+const CREATE_FILE_SUPPORTED_ENDPOINTS = new Set([
+  EModelEndpoint.openAI,
+  EModelEndpoint.azureOpenAI,
+  EModelEndpoint.google,
+  EModelEndpoint.anthropic,
+]);
 
 /**
  * Create an agent with the provided data.
@@ -95,6 +109,9 @@ const loadEphemeralAgent = async ({ req, spec, agent_id, endpoint, model_paramet
   }
   if (ephemeralAgent?.web_search === true || modelSpec?.webSearch === true) {
     tools.push(Tools.web_search);
+  }
+  if (CREATE_FILE_SUPPORTED_ENDPOINTS.has(endpoint)) {
+    tools.push(CREATE_FILE_TOOL);
   }
 
   const addedServers = new Set();
