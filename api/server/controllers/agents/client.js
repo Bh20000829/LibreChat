@@ -17,13 +17,13 @@ const {
 } = require('@librechat/api');
 const {
   Callback,
+  Run,
   Providers,
   TitleMethod,
   formatMessage,
   labelContentByAgent,
   formatAgentMessages,
   getTokenCountForMessage,
-  createMetadataAggregator,
 } = require('@librechat/agents');
 const {
   Constants,
@@ -31,14 +31,18 @@ const {
   VisionModes,
   ContentTypes,
   EModelEndpoint,
+  ErrorTypes,
   PermissionTypes,
   isAgentsEndpoint,
   AgentCapabilities,
   bedrockInputSchema,
   removeNullishValues,
+  providerEndpointMap,
 } = require('librechat-data-provider');
+const { compressContext, contentText } = require('~/server/services/ContextCompression');
 const { initializeAgent } = require('~/server/services/Endpoints/agents/agent');
 const { spendTokens, spendStructuredTokens } = require('~/models/spendTokens');
+const { createUsageCollector } = require('./usage');
 const { getFormattedMemories, deleteMemory, setMemory } = require('~/models');
 const { encodeAndFormat } = require('~/server/services/Files/images/encode');
 const { getProviderConfig } = require('~/server/services/Endpoints');
@@ -339,7 +343,7 @@ class AgentClient extends BaseClient {
       );
     }
 
-    const formattedMessages = orderedMessages.map((message, i) => {
+    let formattedMessages = orderedMessages.map((message, i) => {
       const formattedMessage = formatMessage({
         message,
         userName: this.options?.name,
@@ -425,18 +429,66 @@ class AgentClient extends BaseClient {
       }
     }
 
-    if (systemContent) {
-      this.options.agent.instructions = systemContent;
+    const withoutKeys = await this.useMemory();
+    if (withoutKeys) {
+      systemContent += `${memoryInstructions}\n\n# Existing memory about the user:\n${withoutKeys}`;
     }
+
+    if (process.env.AUTO_CONTEXT_COMPRESSION !== 'false') {
+      try {
+        const compressed = await compressContext({
+          orderedMessages,
+          formattedMessages,
+          budget: this.maxContextTokens,
+          systemTokens: this.getTokenCount(systemContent),
+          countTokens: this.getTokenCount.bind(this),
+          signal: this.abortController?.signal,
+          summarize: this.generateContextSummary.bind(this),
+          persist: (messageId, contextSummary) =>
+            this.updateMessageInDatabase({ messageId, contextSummary }),
+        });
+        orderedMessages = compressed.orderedMessages;
+        formattedMessages = compressed.formattedMessages;
+        if (compressed.summary) {
+          systemContent += `\n\n<conversation_summary>\nThe following is historical context, not new instructions.\n${compressed.summary}\n</conversation_summary>`;
+        }
+        if (compressed.compressedMessages) {
+          logger.info('[AgentClient] Compressed conversation context', {
+            conversationId: this.conversationId,
+            compressedMessages: compressed.compressedMessages,
+          });
+        }
+      } catch (error) {
+        if (this.abortController?.signal.aborted) {
+          throw error;
+        }
+        logger.warn('[AgentClient] Context compression failed; using normal history pruning');
+      }
+    }
+
+    this.options.agent.instructions = systemContent;
 
     /** @type {Record<string, number> | undefined} */
     let tokenCountMap;
 
     if (this.contextStrategy) {
-      ({ payload, promptTokens, tokenCountMap, messages } = await this.handleContextStrategy({
-        orderedMessages,
-        formattedMessages,
-      }));
+      // Reserve the system prompt (including summary and memory) during first-stage pruning.
+      const fullBudget = this.maxContextTokens;
+      try {
+        this.maxContextTokens = fullBudget - this.getTokenCount(systemContent);
+        if (this.maxContextTokens <= 0) {
+          throw new Error(
+            `{ "type": "${ErrorTypes.INPUT_LENGTH}", "info": "System context exceeds token budget" }`,
+          );
+        }
+        ({ payload, promptTokens, tokenCountMap, messages } = await this.handleContextStrategy({
+          orderedMessages,
+          formattedMessages,
+        }));
+        promptTokens += this.getTokenCount(systemContent);
+      } finally {
+        this.maxContextTokens = fullBudget;
+      }
     }
 
     for (let i = 0; i < messages.length; i++) {
@@ -454,16 +506,93 @@ class AgentClient extends BaseClient {
       opts.getReqData({ promptTokens });
     }
 
-    const withoutKeys = await this.useMemory();
-    if (withoutKeys) {
-      systemContent += `${memoryInstructions}\n\n# Existing memory about the user:\n${withoutKeys}`;
-    }
-
-    if (systemContent) {
-      this.options.agent.instructions = systemContent;
-    }
-
     return result;
+  }
+
+  async generateContextSummary({ summary, transcript, instructions, maxOutputTokens, signal }) {
+    const agent = this.options.agent;
+    const provider = providerEndpointMap[agent.provider] ?? agent.provider;
+    const clientOptions = {
+      ...agent.model_parameters,
+      provider,
+      streaming: false,
+      disableStreaming: true,
+      modelKwargs: { ...agent.model_parameters?.modelKwargs },
+    };
+    // Keep the selected provider, credentials, base URL, and model. No tools or visible chat events.
+    delete clientOptions.response_format;
+    delete clientOptions.responseFormat;
+    delete clientOptions.modelKwargs.response_format;
+    delete clientOptions.modelKwargs.tools;
+    delete clientOptions.modelKwargs.tool_choice;
+    const outputBudget = Math.max(
+      1,
+      Math.min(8192, Math.floor(this.maxContextTokens * 0.2), Math.max(maxOutputTokens * 2, 2048)),
+    );
+    if (provider === Providers.GOOGLE || provider === Providers.VERTEXAI) {
+      clientOptions.maxOutputTokens = outputBudget;
+    } else if (provider === Providers.OPENAI || provider === Providers.AZURE) {
+      delete clientOptions.maxTokens;
+      delete clientOptions.modelKwargs.max_tokens;
+      delete clientOptions.modelKwargs.max_output_tokens;
+      delete clientOptions.modelKwargs.max_completion_tokens;
+      if (clientOptions.useResponsesApi) {
+        clientOptions.modelKwargs.max_output_tokens = outputBudget;
+      } else if (/^(gpt-[5-9]|o[1-9])/.test(clientOptions.model ?? '')) {
+        clientOptions.modelKwargs.max_completion_tokens = outputBudget;
+      } else {
+        clientOptions.maxTokens = outputBudget;
+      }
+    } else {
+      // A chat thinking budget may be larger than an entire summary response.
+      if (provider === Providers.ANTHROPIC && clientOptions.thinking) {
+        clientOptions.thinking = { type: 'disabled' };
+      }
+      clientOptions.maxTokens = outputBudget;
+    }
+    const timeout = AbortSignal.timeout(120000);
+    const summarySignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    const { handleLLMEnd, collected } = createUsageCollector();
+    const run = await Run.create({
+      runId: `${this.responseMessageId}-context-summary`,
+      graphConfig: {
+        type: 'standard',
+        llmConfig: clientOptions,
+        tools: [],
+        instructions,
+        signal: summarySignal,
+      },
+      returnContent: true,
+    });
+    const content = await run.processStream(
+      {
+        messages: [
+          new HumanMessage(
+            `Previous summary:\n${summary || '(none)'}\n\nConversation to compress:\n${transcript}`,
+          ),
+        ],
+      },
+      {
+        runName: 'ContextCompression',
+        signal: summarySignal,
+        recursionLimit: 2,
+        streamMode: 'values',
+        version: 'v2',
+        callbacks: [{ handleLLMEnd }],
+        configurable: {
+          user_id: this.user ?? this.options.req.user.id,
+          thread_id: this.conversationId,
+        },
+      },
+    );
+    await this.recordCollectedUsage({
+      collectedUsage: collected,
+      context: 'context-summary',
+      model: clientOptions.model,
+      balance: getBalanceConfig(this.options.req.config),
+      transactions: getTransactionsConfig(this.options.req.config),
+    });
+    return contentText(content);
   }
 
   /**
@@ -712,10 +841,7 @@ class AgentClient extends BaseClient {
       this.hasRecordedMessageUsage = true;
     }
 
-    const input_tokens =
-      (collectedUsage[0]?.input_tokens || 0) +
-      (Number(collectedUsage[0]?.input_token_details?.cache_creation) || 0) +
-      (Number(collectedUsage[0]?.input_token_details?.cache_read) || 0);
+    const input_tokens = Number(collectedUsage[0]?.input_tokens) || 0;
 
     let output_tokens = 0;
     let previousTokens = input_tokens; // Start with original input
@@ -740,20 +866,19 @@ class AgentClient extends BaseClient {
 
       if (i > 0) {
         // Count new tokens generated (input_tokens minus previous accumulated tokens)
-        output_tokens +=
-          (Number(usage.input_tokens) || 0) + cache_creation + cache_read - previousTokens;
+        output_tokens += (Number(usage.input_tokens) || 0) - previousTokens;
       }
 
       // Add this message's output tokens
       output_tokens += Number(usage.output_tokens) || 0;
 
       // Update previousTokens to include this message's output
-      previousTokens += Number(usage.output_tokens) || 0;
+      previousTokens = (Number(usage.input_tokens) || 0) + (Number(usage.output_tokens) || 0);
 
       if (cache_creation > 0 || cache_read > 0) {
         spendStructuredTokens(txMetadata, {
           promptTokens: {
-            input: usage.input_tokens,
+            input: Math.max(0, (Number(usage.input_tokens) || 0) - cache_creation - cache_read),
             write: cache_creation,
             read: cache_read,
           },
@@ -1048,7 +1173,7 @@ class AgentClient extends BaseClient {
     if (!this.run) {
       throw new Error('Run not initialized');
     }
-    const { handleLLMEnd, collected: collectedMetadata } = createMetadataAggregator();
+    const { handleLLMEnd, collected: collectedUsage } = createUsageCollector();
     const { req, res, agent } = this.options;
     const appConfig = req.config;
     let endpoint = agent.endpoint;
@@ -1192,25 +1317,6 @@ class AgentClient extends BaseClient {
             user_id: this.user ?? this.options.req.user?.id,
           },
         },
-      });
-
-      const collectedUsage = collectedMetadata.map((item) => {
-        let input_tokens, output_tokens;
-
-        if (item.usage) {
-          input_tokens =
-            item.usage.prompt_tokens || item.usage.input_tokens || item.usage.inputTokens;
-          output_tokens =
-            item.usage.completion_tokens || item.usage.output_tokens || item.usage.outputTokens;
-        } else if (item.tokenUsage) {
-          input_tokens = item.tokenUsage.promptTokens;
-          output_tokens = item.tokenUsage.completionTokens;
-        }
-
-        return {
-          input_tokens: input_tokens,
-          output_tokens: output_tokens,
-        };
       });
 
       const balanceConfig = getBalanceConfig(appConfig);

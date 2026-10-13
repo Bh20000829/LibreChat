@@ -646,6 +646,20 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
     }
 
     const { text, bytes } = await parseText({ req, file, file_id });
+    if (/\.xlsx$/i.test(file.originalname)) {
+      const { handleFileUpload } = getStrategyFunctions(FileSources.local);
+      const storedFile = await createSanitizedUploadWrapper(handleFileUpload)({
+        req,
+        file,
+        file_id,
+      });
+      return await createTextFile({
+        text,
+        bytes: storedFile.bytes,
+        filepath: storedFile.filepath,
+        type: file.mimetype,
+      });
+    }
     return await createTextFile({ text, bytes, type: file.mimetype });
   }
 

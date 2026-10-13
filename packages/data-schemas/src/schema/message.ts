@@ -73,6 +73,11 @@ const messageSchema: Schema<IMessage> = new Schema(
     summary: {
       type: String,
     },
+    /** Branch-specific rolling context summary; original message content stays intact. */
+    contextSummary: {
+      type: Schema.Types.Mixed,
+      default: undefined,
+    },
     /** 是否用户创建 */
     isCreatedByUser: {
       type: Boolean,

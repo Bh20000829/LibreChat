@@ -4,6 +4,7 @@ import type { TFeedbackRating, TFeedbackTag } from 'librechat-data-provider';
 // @ts-ignore
 export interface IMessage extends Document {
   messageId: string;
+  contextSummary?: { version: number; text: string; prefixHash: string };
   conversationId: string;
   user: string;
   model?: string;

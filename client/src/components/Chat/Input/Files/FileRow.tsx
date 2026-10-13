@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useSetRecoilState } from 'recoil';
 import { useToastContext } from '@librechat/client';
 import { EToolResources } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
@@ -8,6 +9,7 @@ import FileContainer from './FileContainer';
 import { useLocalize } from '~/hooks';
 import { logger } from '~/utils';
 import Image from './Image';
+import store from '~/store';
 
 export default function FileRow({
   files: _files,
@@ -36,6 +38,7 @@ export default function FileRow({
 }) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
+  const setFilePreview = useSetRecoilState(store.filePreview);
   const files = Array.from(_files?.values() ?? []).filter((file) =>
     fileFilter ? fileFilter(file) : true,
   );
@@ -147,7 +150,16 @@ export default function FileRow({
                     source={file.source}
                   />
                 ) : (
-                  <FileContainer file={file} onDelete={handleDelete} />
+                  <FileContainer
+                    file={file}
+                    onDelete={handleDelete}
+                    onClick={() =>
+                      setFilePreview({
+                        ...file,
+                        filename: file.filename ?? file.file?.name,
+                      })
+                    }
+                  />
                 )}
               </div>
             );

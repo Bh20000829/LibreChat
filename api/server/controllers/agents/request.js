@@ -308,6 +308,14 @@ const AgentController = async (req, res, next, initializeClient, addTitle) => {
       performCleanup();
     }
   } catch (error) {
+    logger.warn('[AgentController] Chat request failed', {
+      requestId: res.getHeader('X-Request-Id'),
+      model: typeof req.body.model === 'string' ? req.body.model.slice(0, 100) : undefined,
+      errorType: error?.name,
+      code: error?.code,
+      status: error?.status ?? error?.response?.status,
+      connectionClosed: res.destroyed,
+    });
     // Handle error without capturing much scope
     handleAbortError(res, req, error, {
       conversationId,

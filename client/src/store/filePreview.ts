@@ -8,6 +8,7 @@ export type FilePreviewItem = {
   type?: string;
   source?: string;
   user?: string;
+  file?: File;
   [key: string]: unknown;
 } | null;
 

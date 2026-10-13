@@ -1,9 +1,11 @@
 import React from 'react';
+import { RecoilRoot, useRecoilValue } from 'recoil';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { FileSources } from 'librechat-data-provider';
 import type { ExtendedFile } from '~/common';
 import FileRow from '../FileRow';
+import store from '~/store';
 
 jest.mock('~/hooks', () => ({
   useLocalize: jest.fn(),
@@ -36,14 +38,19 @@ jest.mock('../Image', () => {
 });
 
 jest.mock('../FileContainer', () => {
-  return function MockFileContainer({ file }: any) {
+  return function MockFileContainer({ file, onClick }: any) {
     return (
-      <div data-testid="mock-file-container">
+      <button data-testid="mock-file-container" onClick={onClick}>
         <span data-testid="file-name">{file.filename}</span>
-      </div>
+      </button>
     );
   };
 });
+
+const PreviewSelection = () => {
+  const selected = useRecoilValue(store.filePreview);
+  return <span data-testid="selected-preview-name">{selected?.filename ?? ''}</span>;
+};
 
 const mockUseLocalize = jest.requireMock('~/hooks').useLocalize;
 const mockUseDeleteFilesMutation = jest.requireMock('~/data-provider').useDeleteFilesMutation;
@@ -88,9 +95,12 @@ describe('FileRow', () => {
     ...overrides,
   });
 
-  const renderFileRow = (files: Map<string, ExtendedFile>) => {
+  const renderFileRow = (files: Map<string, ExtendedFile>, observePreview = false) => {
     return render(
-      <FileRow files={files} setFiles={mockSetFiles} setFilesLoading={mockSetFilesLoading} />,
+      <RecoilRoot>
+        <FileRow files={files} setFiles={mockSetFiles} setFilesLoading={mockSetFilesLoading} />
+        {observePreview && <PreviewSelection />}
+      </RecoilRoot>,
     );
   };
 
@@ -314,11 +324,30 @@ describe('FileRow', () => {
 
     it('should render nothing when files is undefined', () => {
       const { container } = render(
-        <FileRow files={undefined} setFiles={mockSetFiles} setFilesLoading={mockSetFilesLoading} />,
+        <RecoilRoot>
+          <FileRow
+            files={undefined}
+            setFiles={mockSetFiles}
+            setFilesLoading={mockSetFilesLoading}
+          />
+        </RecoilRoot>,
       );
 
       expect(container.firstChild).toBeNull();
     });
+  });
+
+  it('opens the local file preview before upload completes', () => {
+    const file = createMockFile({
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      filename: 'report.xlsx',
+      progress: 0.2,
+    });
+    renderFileRow(new Map([[file.file_id, file]]), true);
+
+    screen.getByTestId('mock-file-container').click();
+
+    expect(screen.getByTestId('selected-preview-name')).toHaveTextContent('report.xlsx');
   });
 
   describe('Regression: Blob URL Bug Fix', () => {

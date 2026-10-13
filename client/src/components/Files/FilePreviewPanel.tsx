@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { useSetRecoilState } from 'recoil';
 import { Button, Spinner, useToastContext } from '@librechat/client';
@@ -10,8 +10,12 @@ import { cn } from '~/utils';
 
 type SpreadsheetPreview = {
   kind: 'spreadsheet';
-  name: string;
-  rows: string[][];
+  sheets: Array<{
+    name: string;
+    rows: string[][];
+    rowCount: number;
+    columnCount: number;
+  }>;
 };
 
 type TextPreview = {
@@ -40,10 +44,8 @@ type ZipEntry = {
 };
 
 const MAX_TEXT_BYTES = 500000;
-const MAX_ROWS = 80;
-const MAX_COLUMNS = 26;
 const MIN_VISIBLE_ROWS = 30;
-const MIN_VISIBLE_COLUMNS = 15;
+const MIN_VISIBLE_COLUMNS = 8;
 
 const textExtensions = new Set([
   'asmdef',
@@ -187,7 +189,7 @@ const resolveSheetPath = (relationshipTarget: string) => {
   if (relationshipTarget.startsWith('xl/')) {
     return relationshipTarget;
   }
-  return `xl/${relationshipTarget}`;
+  return new URL(relationshipTarget, 'https://xlsx.local/xl/').pathname.slice(1);
 };
 
 const parseXlsx = async (buffer: ArrayBuffer): Promise<SpreadsheetPreview | null> => {
@@ -200,54 +202,51 @@ const parseXlsx = async (buffer: ArrayBuffer): Promise<SpreadsheetPreview | null
     return null;
   }
 
-  const firstSheet = workbook.getElementsByTagName('sheet')[0];
-  const relationshipId = firstSheet?.getAttribute('r:id');
-  const sheetName = firstSheet?.getAttribute('name') ?? '';
-  const relationship = Array.from(relationships.getElementsByTagName('Relationship')).find(
-    (item) => item.getAttribute('Id') === relationshipId,
-  );
-  const sheetTarget = relationship?.getAttribute('Target');
-
-  if (!sheetTarget) {
-    return null;
-  }
-
-  const worksheet = getXml(entries, resolveSheetPath(sheetTarget));
-  if (!worksheet) {
-    return null;
-  }
-
   const sharedStrings = sharedStringsXml
     ? Array.from(sharedStringsXml.getElementsByTagName('si')).map(textFromNode)
     : [];
-  const rows: string[][] = [];
-
-  Array.from(worksheet.getElementsByTagName('c')).forEach((cell) => {
-    const ref = cell.getAttribute('r') ?? 'A1';
-    const row = rowIndex(ref);
-    const column = columnIndex(ref);
-
-    if (row >= MAX_ROWS || column >= MAX_COLUMNS) {
-      return;
+  const sheets = Array.from(workbook.getElementsByTagName('sheet')).flatMap((sheet) => {
+    const relationshipId = sheet.getAttribute('r:id');
+    const relationship = Array.from(relationships.getElementsByTagName('Relationship')).find(
+      (item) => item.getAttribute('Id') === relationshipId,
+    );
+    const sheetTarget = relationship?.getAttribute('Target');
+    const worksheet = sheetTarget ? getXml(entries, resolveSheetPath(sheetTarget)) : null;
+    if (!worksheet) {
+      return [];
     }
 
-    const type = cell.getAttribute('t');
-    const valueNode = cell.getElementsByTagName('v')[0];
-    let value = valueNode?.textContent ?? '';
+    const rows: string[][] = [];
+    let rowCount = 0;
+    let columnCount = 0;
+    Array.from(worksheet.getElementsByTagName('c')).forEach((cell) => {
+      const ref = cell.getAttribute('r') ?? 'A1';
+      const row = rowIndex(ref);
+      const column = columnIndex(ref);
+      const type = cell.getAttribute('t');
+      const valueNode = cell.getElementsByTagName('v')[0];
+      let value = valueNode?.textContent ?? '';
 
-    if (type === 's') {
-      value = sharedStrings[Number(value)] ?? value;
-    } else if (type === 'inlineStr') {
-      value = textFromNode(cell);
-    } else if (type === 'b') {
-      value = value === '1' ? 'TRUE' : 'FALSE';
-    }
+      if (type === 's') {
+        value = sharedStrings[Number(value)] ?? value;
+      } else if (type === 'inlineStr') {
+        value = textFromNode(cell);
+      } else if (type === 'b') {
+        value = value === '1' ? 'TRUE' : 'FALSE';
+      }
 
-    rows[row] = rows[row] ?? [];
-    rows[row][column] = value;
+      if (value !== '') {
+        rows[row] = rows[row] ?? [];
+        rows[row][column] = value;
+        rowCount = Math.max(rowCount, row + 1);
+        columnCount = Math.max(columnCount, column + 1);
+      }
+    });
+
+    return [{ name: sheet.getAttribute('name') ?? '', rows, rowCount, columnCount }];
   });
 
-  return { kind: 'spreadsheet', name: sheetName, rows };
+  return sheets.length ? { kind: 'spreadsheet', sheets } : null;
 };
 
 const parsePreview = async (
@@ -275,54 +274,142 @@ const parsePreview = async (
 };
 
 const SpreadsheetTable = ({ preview }: { preview: SpreadsheetPreview }) => {
-  const maxColumnCount = Math.max(1, ...preview.rows.map((row) => row?.length ?? 0));
-  const columnCount = Math.min(MAX_COLUMNS, Math.max(MIN_VISIBLE_COLUMNS, maxColumnCount));
-  const rowCount = Math.min(MAX_ROWS, Math.max(MIN_VISIBLE_ROWS, preview.rows.length));
-  const columns = Array.from({ length: columnCount }, (_, index) =>
-    String.fromCharCode('A'.charCodeAt(0) + index),
-  );
+  const [activeSheet, setActiveSheet] = useState(0);
+  const [maxHorizontalOffset, setMaxHorizontalOffset] = useState(0);
+  const [horizontalOffset, setHorizontalOffset] = useState(0);
+  const sheetViewportRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const sheet = preview.sheets[activeSheet] ?? preview.sheets[0];
+  const columnCount = Math.max(MIN_VISIBLE_COLUMNS, sheet.columnCount);
+  const rowCount = Math.max(MIN_VISIBLE_ROWS, sheet.rowCount);
+  const columns = Array.from({ length: columnCount }, (_, index) => {
+    let value = index + 1;
+    let label = '';
+    while (value > 0) {
+      value -= 1;
+      label = String.fromCharCode(65 + (value % 26)) + label;
+      value = Math.floor(value / 26);
+    }
+    return label;
+  });
+
+  useEffect(() => {
+    const table = tableRef.current;
+    const viewport = sheetViewportRef.current;
+    if (!table || !viewport) {
+      return;
+    }
+
+    const updateWidth = () => {
+      setMaxHorizontalOffset(Math.max(0, viewport.scrollWidth - viewport.clientWidth));
+      setHorizontalOffset(viewport.scrollLeft);
+    };
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(table);
+    observer.observe(viewport);
+    updateWidth();
+    return () => observer.disconnect();
+  }, [activeSheet, preview]);
+
+  const syncFromSheet = () => {
+    if (sheetViewportRef.current) {
+      setHorizontalOffset(sheetViewportRef.current.scrollLeft);
+    }
+  };
 
   return (
-    <div className="h-full overflow-auto bg-surface-primary">
-      <table className="min-w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="sticky left-0 top-0 z-20 h-8 w-10 border border-border-light bg-surface-secondary" />
-            {columns.map((column) => (
-              <th
-                key={column}
-                className="sticky top-0 z-10 h-8 min-w-28 border border-border-light bg-surface-secondary px-2 text-center font-medium text-text-secondary"
-              >
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {Array.from({ length: rowCount }, (_, row) => (
-            <tr key={row}>
-              <th className="sticky left-0 z-10 h-8 border border-border-light bg-surface-secondary px-2 text-right font-medium text-text-secondary">
-                {row + 1}
-              </th>
-              {columns.map((column, columnPosition) => {
-                const cell = preview.rows[row]?.[columnPosition] ?? '';
-                return (
-                  <td
-                    key={`${row}-${column}`}
-                    className={cn(
-                      'h-8 min-w-28 border border-border-light px-2 align-middle text-text-primary',
-                      row === 0 && columnPosition === 0 ? 'outline outline-2 outline-blue-500' : '',
-                    )}
-                    title={cell}
-                  >
-                    <div className="max-w-56 truncate">{cell}</div>
-                  </td>
-                );
-              })}
+    <div className="flex h-full min-w-0 flex-col bg-surface-primary" dir="ltr">
+      <div
+        ref={sheetViewportRef}
+        className="min-h-0 flex-1 overflow-auto"
+        dir="ltr"
+        onScroll={syncFromSheet}
+      >
+        <table ref={tableRef} className="w-max min-w-full border-collapse text-sm" dir="ltr">
+          <thead>
+            <tr>
+              <th className="sticky left-0 top-0 z-20 h-8 w-10 border border-border-light bg-surface-secondary" />
+              {columns.map((column) => (
+                <th
+                  key={column}
+                  className="sticky top-0 z-10 h-8 min-w-28 border border-border-light bg-surface-secondary px-2 text-center font-medium text-text-secondary"
+                >
+                  {column}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {Array.from({ length: rowCount }, (_, row) => (
+              <tr key={row}>
+                <th className="sticky left-0 z-10 h-8 border border-border-light bg-surface-secondary px-2 text-right font-medium text-text-secondary">
+                  {row + 1}
+                </th>
+                {columns.map((column, columnPosition) => {
+                  const cell = sheet.rows[row]?.[columnPosition] ?? '';
+                  return (
+                    <td
+                      key={`${row}-${column}`}
+                      className={cn(
+                        'h-8 min-w-28 border border-border-light px-2 align-middle text-text-primary',
+                        row === 0 && columnPosition === 0
+                          ? 'outline outline-2 outline-blue-500'
+                          : '',
+                      )}
+                      title={cell}
+                    >
+                      <div className="max-w-56 truncate">{cell}</div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {maxHorizontalOffset > 1 && (
+        <div className="flex h-7 shrink-0 items-center border-t border-border-light bg-surface-secondary px-2">
+          <input
+            type="range"
+            min={0}
+            max={maxHorizontalOffset}
+            value={Math.min(horizontalOffset, maxHorizontalOffset)}
+            onChange={(event) => {
+              const offset = Number(event.target.value);
+              if (sheetViewportRef.current) {
+                sheetViewportRef.current.scrollLeft = offset;
+              }
+              setHorizontalOffset(offset);
+            }}
+            aria-label="横向滚动 Excel"
+            className="w-full cursor-ew-resize accent-blue-500"
+          />
+        </div>
+      )}
+      <div className="flex shrink-0 gap-1 overflow-x-auto border-t border-border-light bg-surface-secondary px-2 py-1">
+        {preview.sheets.map((item, index) => (
+          <button
+            key={`${item.name}-${index}`}
+            type="button"
+            onClick={() => {
+              setActiveSheet(index);
+              if (sheetViewportRef.current) {
+                sheetViewportRef.current.scrollLeft = 0;
+                sheetViewportRef.current.scrollTop = 0;
+              }
+              setHorizontalOffset(0);
+            }}
+            className={cn(
+              'shrink-0 rounded px-3 py-1 text-xs',
+              index === activeSheet
+                ? 'bg-surface-primary font-semibold text-text-primary'
+                : 'text-text-secondary hover:bg-surface-primary',
+            )}
+          >
+            {item.name || `Sheet ${index + 1}`}
+          </button>
+        ))}
+      </div>
     </div>
   );
 };
@@ -390,8 +477,27 @@ export default function FilePreviewPanel({ item }: { item: NonNullable<FilePrevi
 
     const loadPreview = async () => {
       try {
+        if (item.file instanceof Blob) {
+          const url = window.URL.createObjectURL(item.file);
+          if (!active) {
+            window.URL.revokeObjectURL(url);
+            return;
+          }
+          currentObjectUrl = url;
+          setObjectUrl(url);
+          const nextPreview = await parsePreview(item.file, item);
+          if (active) {
+            setPreview(nextPreview);
+          }
+          return;
+        }
+
         const url = await previewObjectUrl();
-        if (!active || !url) {
+        if (!active) {
+          return;
+        }
+        if (!url) {
+          setHasError(true);
           return;
         }
 

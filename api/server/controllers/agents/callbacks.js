@@ -15,6 +15,7 @@ const { processFileCitations } = require('~/server/services/Files/Citations');
 const { processCodeOutput } = require('~/server/services/Files/Code/process');
 const { loadAuthValues } = require('~/server/services/Tools/credentials');
 const { saveBase64Image } = require('~/server/services/Files/process');
+const { normalizeUsage } = require('./usage');
 
 const CREATE_FILE_TOOL = 'create_file';
 
@@ -84,7 +85,7 @@ class ModelEndHandler {
         await handleToolCalls(toolCalls, metadata, graph);
       }
 
-      const usage = data?.output?.usage_metadata;
+      const usage = normalizeUsage(data?.output?.usage_metadata, data?.output?.response_metadata);
       if (!usage) {
         return this.finalize(errorMessage);
       }

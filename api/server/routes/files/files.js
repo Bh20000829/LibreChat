@@ -330,6 +330,11 @@ async function pipeFileResponse({ req, res, file, fileId, download = false }) {
 
   fileStream.on('error', (streamError) => {
     logger.error('[FILE ROUTE] Stream error:', streamError);
+    if (!res.headersSent) {
+      res.status(404).send('File not found');
+    } else {
+      res.destroy(streamError);
+    }
   });
 
   setFileResponseHeaders({ res, file, download });

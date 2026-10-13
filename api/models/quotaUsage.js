@@ -122,7 +122,10 @@ const getNextResetBizDate = (quota) => {
   const defaultQuotaStartDate = normalizeBizDateString(process.env.QUOTA_START_DATE) || bizDate;
 
   const quotaStartDate = normalizeBizDateString(quota?.quotaStartDate) || defaultQuotaStartDate;
-  const quotaCycleDays = Math.max(1, Math.floor(Number(quota?.quotaCycleDays) || defaultQuotaCycleDays));
+  const quotaCycleDays = Math.max(
+    1,
+    Math.floor(Number(quota?.quotaCycleDays) || defaultQuotaCycleDays),
+  );
   const daysSinceStart = getDaysBetweenBizDates(quotaStartDate, bizDate);
 
   if (daysSinceStart < 0) {
@@ -212,11 +215,17 @@ const ensureQuotaRecord = async (user) => {
           usedMonthCny: quota.usedMonthCny == null ? 0 : Number(quota.usedMonthCny) || 0,
           lastMonthCny: quota.lastMonthCny == null ? 0 : Number(quota.lastMonthCny) || 0,
           usedInputTokens:
-            quota.usedInputTokens == null ? 0 : Math.max(0, Math.floor(Number(quota.usedInputTokens) || 0)),
+            quota.usedInputTokens == null
+              ? 0
+              : Math.max(0, Math.floor(Number(quota.usedInputTokens) || 0)),
           usedOutputTokens:
-            quota.usedOutputTokens == null ? 0 : Math.max(0, Math.floor(Number(quota.usedOutputTokens) || 0)),
+            quota.usedOutputTokens == null
+              ? 0
+              : Math.max(0, Math.floor(Number(quota.usedOutputTokens) || 0)),
           usedCacheTokens:
-            quota.usedCacheTokens == null ? 0 : Math.max(0, Math.floor(Number(quota.usedCacheTokens) || 0)),
+            quota.usedCacheTokens == null
+              ? 0
+              : Math.max(0, Math.floor(Number(quota.usedCacheTokens) || 0)),
           bizMonth: quota.bizMonth || bizMonth,
           lastMonthBizMonth: quota.lastMonthBizMonth || null,
           quotaStartDate: normalizeBizDateString(quota.quotaStartDate) || defaultQuotaStartDate,
@@ -246,8 +255,14 @@ const ensureQuotaRecord = async (user) => {
   }
 
   const quotaStartDate = normalizeBizDateString(quota.quotaStartDate) || defaultQuotaStartDate;
-  const quotaCycleDays = Math.max(1, Math.floor(Number(quota.quotaCycleDays) || defaultQuotaCycleDays));
-  const cycleQuotaCny = Math.max(0, Number(quota.cycleQuotaCny ?? quota.dailyQuotaCny ?? defaultDailyQuotaCny));
+  const quotaCycleDays = Math.max(
+    1,
+    Math.floor(Number(quota.quotaCycleDays) || defaultQuotaCycleDays),
+  );
+  const cycleQuotaCny = Math.max(
+    0,
+    Number(quota.cycleQuotaCny ?? quota.dailyQuotaCny ?? defaultDailyQuotaCny),
+  );
   const daysSinceStart = getDaysBetweenBizDates(quotaStartDate, bizDate);
 
   if (daysSinceStart >= quotaCycleDays) {
@@ -303,31 +318,41 @@ const incrementQuotaUsage = async (user, usage) => {
     return;
   }
 
-  const quota = await ensureQuotaRecord(user);
-  const currentRemaining = Math.max(0, Number(quota?.remainingBalanceCny ?? 0));
-  const nextRemaining = roundMoney8(Math.max(0, currentRemaining - costCny));
-  const nextUsedCycle = roundMoney8(
-    Math.max(0, Number(quota?.usedCycleCny ?? quota?.usedTodayCny ?? 0)) + costCny,
-  );
-  const nextUsedMonth = roundMoney8(Math.max(0, Number(quota?.usedMonthCny ?? 0)) + costCny);
-  const nextInputTokens = Math.max(0, Math.floor(Number(quota?.usedInputTokens ?? 0)) + inputTokens);
-  const nextOutputTokens = Math.max(0, Math.floor(Number(quota?.usedOutputTokens ?? 0)) + outputTokens);
-  const nextCacheTokens = Math.max(0, Math.floor(Number(quota?.usedCacheTokens ?? 0)) + cacheTokens);
+  await ensureQuotaRecord(user);
 
-  await UserQuota.findOneAndUpdate(
-    { user },
+  const addNonNegative = (field, amount) => ({
+    $add: [{ $max: [0, { $ifNull: [`$${field}`, 0] }] }, amount],
+  });
+  const nextUsedCycle = {
+    $round: [
+      { $add: [{ $max: [0, { $ifNull: ['$usedCycleCny', '$usedTodayCny'] }] }, costCny] },
+      8,
+    ],
+  };
+
+  await UserQuota.findOneAndUpdate({ user }, [
     {
       $set: {
-        usedInputTokens: nextInputTokens,
-        usedOutputTokens: nextOutputTokens,
-        usedCacheTokens: nextCacheTokens,
+        usedInputTokens: addNonNegative('usedInputTokens', inputTokens),
+        usedOutputTokens: addNonNegative('usedOutputTokens', outputTokens),
+        usedCacheTokens: addNonNegative('usedCacheTokens', cacheTokens),
         usedTodayCny: nextUsedCycle,
         usedCycleCny: nextUsedCycle,
-        usedMonthCny: nextUsedMonth,
-        remainingBalanceCny: nextRemaining,
+        usedMonthCny: { $round: [addNonNegative('usedMonthCny', costCny), 8] },
+        remainingBalanceCny: {
+          $round: [
+            {
+              $max: [
+                0,
+                { $subtract: [{ $max: [0, { $ifNull: ['$remainingBalanceCny', 0] }] }, costCny] },
+              ],
+            },
+            8,
+          ],
+        },
       },
     },
-  );
+  ]);
 };
 
 module.exports = {
